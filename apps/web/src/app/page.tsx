@@ -3,11 +3,14 @@
 /**
  * ダッシュボードページ
  * 統計カード + 最近の論文 + プロジェクト + メモ
+ * すべてのデータをAPIから取得
  */
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiGet } from "@/lib/api/client";
+
+/* ---------- 型定義 ---------- */
 
 interface DashboardProject {
   id: string;
@@ -20,6 +23,22 @@ interface ProjectListResponse {
   projects: DashboardProject[];
   total: number;
 }
+
+interface PaperItem {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string;
+  status: string;
+}
+
+interface PaperListResponse {
+  papers: PaperItem[];
+  total: number;
+}
+
+/* ---------- ユーティリティ ---------- */
 
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -38,67 +57,65 @@ function formatRelativeTime(dateStr: string | null): string {
   return date.toLocaleDateString("ja-JP");
 }
 
-// ダミーデータ（後でAPI連携に置き換え）
-const stats = [
-  { label: "保存済み論文", value: "24", change: "+3 今週", icon: "📄" },
-  { label: "プロジェクト", value: "5", change: "2 アクティブ", icon: "📁" },
-  { label: "メモ", value: "18", change: "+5 今週", icon: "✏️" },
-  { label: "検索回数", value: "142", change: "+12 今日", icon: "🔍" },
-];
-
-const recentPapers = [
-  {
-    id: "1",
-    title: "Attention Is All You Need",
-    authors: ["Vaswani, A.", "Shazeer, N.", "Parmar, N."],
-    year: 2017,
-    venue: "NeurIPS",
-    status: "READY" as const,
-    isLiked: true,
-  },
-  {
-    id: "2",
-    title: "BERT: Pre-training of Deep Bidirectional Transformers",
-    authors: ["Devlin, J.", "Chang, M.", "Lee, K."],
-    year: 2019,
-    venue: "NAACL",
-    status: "INGESTING" as const,
-    isLiked: true,
-  },
-  {
-    id: "3",
-    title: "Language Models are Few-Shot Learners",
-    authors: ["Brown, T.", "Mann, B.", "Ryder, N."],
-    year: 2020,
-    venue: "NeurIPS",
-    status: "READY" as const,
-    isLiked: false,
-  },
-];
-
-// recentProjects is now fetched from API
-
-const statusColors = {
+const statusColors: Record<string, string> = {
   READY: "bg-emerald-500/20 text-emerald-400",
   INGESTING: "bg-amber-500/20 text-amber-400",
   PENDING: "bg-gray-500/20 text-gray-400",
   FAILED: "bg-red-500/20 text-red-400",
 };
 
-const statusLabels = {
+const statusLabels: Record<string, string> = {
   READY: "完了",
   INGESTING: "処理中",
   PENDING: "保留",
   FAILED: "失敗",
 };
 
+/* ---------- コンポーネント ---------- */
+
 export default function DashboardPage() {
   const [recentProjects, setRecentProjects] = useState<DashboardProject[]>([]);
+  const [recentPapers, setRecentPapers] = useState<PaperItem[]>([]);
+  const [stats, setStats] = useState([
+    { label: "保存済み論文", value: "-", change: "", icon: "📄" },
+    { label: "プロジェクト", value: "-", change: "", icon: "📁" },
+    { label: "メモ", value: "-", change: "", icon: "✏️" },
+    { label: "検索回数", value: "-", change: "", icon: "🔍" },
+  ]);
 
   useEffect(() => {
+    // プロジェクト一覧
     apiGet<ProjectListResponse>("/api/v1/projects")
-      .then((data) => setRecentProjects(data.projects.slice(0, 3)))
+      .then((data) => {
+        setRecentProjects(data.projects.slice(0, 3));
+        const activeCount = data.projects.length;
+        setStats((prev) =>
+          prev.map((s) =>
+            s.label === "プロジェクト"
+              ? {
+                  ...s,
+                  value: String(data.total),
+                  change: `${activeCount} アクティブ`,
+                }
+              : s,
+          ),
+        );
+      })
       .catch(() => setRecentProjects([]));
+
+    // 論文ライブラリ
+    apiGet<PaperListResponse>("/api/v1/library")
+      .then((data) => {
+        setRecentPapers(data.papers.slice(0, 3));
+        setStats((prev) =>
+          prev.map((s) =>
+            s.label === "保存済み論文"
+              ? { ...s, value: String(data.total) }
+              : s,
+          ),
+        );
+      })
+      .catch(() => setRecentPapers([]));
   }, []);
 
   return (
@@ -144,6 +161,11 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="space-y-3">
+            {recentPapers.length === 0 && (
+              <div className="glass-card rounded-xl p-6 text-center text-muted-foreground text-sm">
+                まだ論文が保存されていません。検索から論文を追加しましょう。
+              </div>
+            )}
             {recentPapers.map((paper) => (
               <Link key={paper.id} href={`/papers/${paper.id}`}>
                 <div className="group glass-card rounded-xl p-4 transition-all duration-200 hover:scale-[1.01] hover:border-primary/30">
@@ -161,22 +183,13 @@ export default function DashboardPage() {
                         </span>
                         <span
                           className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                            statusColors[paper.status]
+                            statusColors[paper.status] || statusColors.PENDING
                           }`}
                         >
-                          {statusLabels[paper.status]}
+                          {statusLabels[paper.status] || paper.status}
                         </span>
                       </div>
                     </div>
-                    <button
-                      className={`mt-1 text-lg transition-transform hover:scale-110 ${
-                        paper.isLiked
-                          ? "text-red-400"
-                          : "text-muted-foreground/40"
-                      }`}
-                    >
-                      {paper.isLiked ? "❤️" : "🤍"}
-                    </button>
                   </div>
                 </div>
               </Link>
@@ -198,6 +211,11 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div className="space-y-2">
+              {recentProjects.length === 0 && (
+                <div className="glass-card rounded-xl p-4 text-center text-muted-foreground text-sm">
+                  プロジェクトがありません
+                </div>
+              )}
               {recentProjects.map((project) => (
                 <Link key={project.id} href={`/projects/${project.id}`}>
                   <div className="glass-card rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
