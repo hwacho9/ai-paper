@@ -2,12 +2,12 @@
 
 /**
  * プロジェクト一覧ページ
- * Firestore からプロジェクトを取得して表示 + 新規作成
+ * Firestore からプロジェクトを取得して表示 + 新規作成 + 削除
  */
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { apiGet, apiPost } from "@/lib/api/client";
+import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 
 interface Project {
   id: string;
@@ -98,6 +98,23 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleDelete = async (projectId: string) => {
+    if (
+      !confirm(
+        "本当にこのプロジェクトを削除しますか？\n（含まれる論文データは削除されません）",
+      )
+    )
+      return;
+
+    try {
+      await apiDelete(`/api/v1/projects/${projectId}`);
+      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "削除に失敗しました";
+      alert(message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ヘッダー */}
@@ -145,8 +162,8 @@ export default function ProjectsPage() {
 
       {/* ローディング */}
       {loading && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
             <div
               key={i}
               className="glass-card rounded-xl overflow-hidden animate-pulse"
@@ -166,23 +183,54 @@ export default function ProjectsPage() {
       )}
 
       {/* プロジェクトグリッド */}
-      {!loading && projects.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {!loading && !error && projects.length > 0 && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project, index) => (
-            <Link key={project.id} href={`/projects/${project.id}`}>
-              <div className="glass-card group h-full rounded-xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:border-primary/30 hover:glow">
+            <Link
+              key={project.id}
+              href={`/projects/${project.id}`}
+              className="block h-full"
+            >
+              <div className="glass-card group relative h-full rounded-xl overflow-hidden transition-all duration-300 hover:scale-[1.02] hover:border-primary/30 hover:glow flex flex-col">
+                {/* 削除ボタン (ホバー時に表示) */}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDelete(project.id);
+                  }}
+                  className="absolute top-3 right-3 z-10 rounded-lg bg-background/80 p-2 text-muted-foreground opacity-0 shadow-sm backdrop-blur transition-all
+                    hover:bg-red-50 hover:text-red-500 group-hover:opacity-100 focus:opacity-100"
+                  title="プロジェクトを削除"
+                >
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                    />
+                  </svg>
+                </button>
+
                 {/* カラーバー */}
                 <div
                   className={`h-1.5 w-full bg-gradient-to-r ${colorPalette[index % colorPalette.length]}`}
                 />
-                <div className="p-5">
-                  <h3 className="text-lg font-semibold group-hover:text-primary transition-colors">
+
+                <div className="p-5 flex-1 flex flex-col">
+                  <h3 className="text-lg font-semibold group-hover:text-primary transition-colors pr-8">
                     {project.title}
                   </h3>
-                  <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                    {project.description}
+                  <p className="mt-2 text-sm text-muted-foreground line-clamp-3 flex-1">
+                    {project.description || "説明なし"}
                   </p>
-                  <div className="mt-4 flex items-center gap-4 text-xs text-muted-foreground">
+                  <div className="mt-5 flex items-center justify-between text-xs text-muted-foreground border-t border-border/50 pt-4">
                     <span className="flex items-center gap-1.5">
                       <svg
                         className="h-3.5 w-3.5"
@@ -199,9 +247,7 @@ export default function ProjectsPage() {
                       </svg>
                       {project.paper_count} 論文
                     </span>
-                    <span className="ml-auto">
-                      {formatRelativeTime(project.updated_at)}
-                    </span>
+                    <span>{formatRelativeTime(project.updated_at)}</span>
                   </div>
                 </div>
               </div>
