@@ -1,0 +1,40 @@
+api-1  | INFO:     Will watch for changes in these directories: ['/app']
+api-1  | INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
+api-1  | INFO:     Started reloader process [7] using WatchFiles
+api-1  | INFO:     Started server process [9]
+api-1  | INFO:     Waiting for application startup.
+api-1  | INFO:     Application startup complete.
+api-1  | INFO:     127.0.0.1:37862 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     172.19.0.1:38590 - "GET /api/v1/me HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:51546 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     172.19.0.1:44102 - "OPTIONS /api/v1/search/papers?q=VR&limit=20 HTTP/1.1" 200 OK
+api-1  | Gemini API Error: Client error '401 Unauthorized' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AQ.Ab8RN6LL0RQEhzSZOBrrfaT4VIv03mMjk0wpU-Ydm5SMOdBEDQ'
+api-1  | For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+api-1  | Using Semantic Scholar...
+api-1  | INFO:     127.0.0.1:57454 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | Semantic Scholar API Error: RetryError[<Future at 0x7b6170723cd0 state=finished raised HTTPStatusError>]
+api-1  | INFO:     172.19.0.1:44102 - "GET /api/v1/search/papers?q=VR&limit=20 HTTP/1.1" 503 Service Unavailable
+api-1  | INFO:     127.0.0.1:60882 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:35560 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:53090 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:36820 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:52748 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:36304 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:48596 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:48874 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:46472 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:55592 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:43552 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:34076 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     172.19.0.1:46914 - "GET /api/v1/me HTTP/1.1" 200 OK
+api-1  | Gemini API Error: Client error '401 Unauthorized' for url 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AQ.Ab8RN6LL0RQEhzSZOBrrfaT4VIv03mMjk0wpU-Ydm5SMOdBEDQ'
+api-1  | For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+api-1  | Using Semantic Scholar...
+api-1  | INFO:     127.0.0.1:46442 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | Semantic Scholar API Error: RetryError[<Future at 0x7b6170722b90 state=finished raised HTTPStatusError>]
+api-1  | INFO:     172.19.0.1:46914 - "GET /api/v1/search/papers?q=VR&limit=20 HTTP/1.1" 503 Service Unavailable
+api-1  | INFO:     127.0.0.1:44844 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:58096 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:38264 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:40724 - "GET /healthz HTTP/1.1" 200 OK
+api-1  | INFO:     127.0.0.1:43684 - "GET /healthz HTTP/1.1" 200 OK

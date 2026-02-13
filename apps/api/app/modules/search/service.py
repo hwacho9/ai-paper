@@ -3,12 +3,13 @@ D-04: 論文検索 - サービス
 """
 from app.core.semantic_scholar import SemanticScholarClient
 from app.core.gemini import gemini_client
+from app.core.config import settings
 from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
 from fastapi import HTTPException
 
 class SearchService:
     def __init__(self):
-        self.api_client = SemanticScholarClient()
+        self.api_client = SemanticScholarClient(api_key=settings.semantic_scholar_api_key)
         self.gemini_client = gemini_client
 
     async def search_papers(self, query: str, limit: int = 20, offset: int = 0) -> SearchResultListResponse:
