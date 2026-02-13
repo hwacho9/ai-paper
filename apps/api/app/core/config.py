@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Semantic Scholar
     semantic_scholar_api_key: str | None = None
 
+    # Google API Key (Vertex AI / Gemini)
+    google_api_key: str | None = None
+
     @property
     def cors_allow_origins_list(self) -> list[str]:
         """CORS許可オリジンをリストで返す"""
@@ -45,3 +48,4 @@ class Settings(BaseSettings):
 
 # シングルトンインスタンス
 settings = Settings()
+semantic_scholar_api_key: str | None = None
