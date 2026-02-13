@@ -32,18 +32,18 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchLibrary = async () => {
+    const fetchData = async () => {
       try {
-        const data = await getLibrary();
-        setPapers(data.papers);
+        const libraryData = await getLibrary();
+        setPapers(libraryData.papers);
       } catch (err) {
         console.error(err);
-        toast.error("ライブラリの取得に失敗しました");
+        toast.error("データの取得に失敗しました");
       } finally {
         setLoading(false);
       }
     };
-    fetchLibrary();
+    fetchData();
   }, []);
 
   if (loading) {
@@ -69,7 +69,11 @@ export default function LibraryPage() {
           <div className="flex rounded-lg border border-border bg-muted/30">
             <button
               onClick={() => setViewMode("grid")}
-              className={`rounded-l-lg p-2 transition-colors ${viewMode === "grid" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              className={`rounded-l-lg p-2 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               <svg
                 className="h-4 w-4"
@@ -87,7 +91,11 @@ export default function LibraryPage() {
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`rounded-r-lg p-2 transition-colors ${viewMode === "list" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              className={`rounded-r-lg p-2 transition-colors ${
+                viewMode === "list"
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               <svg
                 className="h-4 w-4"
@@ -137,24 +145,23 @@ export default function LibraryPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {papers.map((paper) => (
             <Link key={paper.id} href={`/papers/${paper.id}`}>
-              <div className="glass-card group h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow">
-                <div className="flex items-start justify-between">
+              <div className="glass-card group h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow flex flex-col">
+                <div className="flex items-start justify-between mb-3">
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[paper.status] || statusColors.PENDING}`}
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      statusColors[paper.status] || statusColors.PENDING
+                    }`}
                   >
                     {statusLabels[paper.status] || paper.status}
                   </span>
-                  <button className="text-red-400 transition-transform hover:scale-110">
-                    ❤️
-                  </button>
                 </div>
-                <h3 className="mt-3 font-semibold leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                <h3 className="font-semibold leading-snug group-hover:text-primary transition-colors line-clamp-2">
                   {paper.title}
                 </h3>
                 <p className="mt-1 text-sm text-muted-foreground truncate">
                   {paper.authors.join(", ")}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="mt-auto pt-2 text-xs text-muted-foreground">
                   {paper.venue} {paper.year}
                 </p>
               </div>
@@ -167,17 +174,20 @@ export default function LibraryPage() {
           {papers.map((paper) => (
             <Link key={paper.id} href={`/papers/${paper.id}`}>
               <div className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
-                <button className="text-red-400 text-sm">❤️</button>
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-medium group-hover:text-primary transition-colors truncate">
-                    {paper.title}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium group-hover:text-primary transition-colors truncate">
+                      {paper.title}
+                    </h3>
+                  </div>
                   <p className="text-sm text-muted-foreground truncate">
                     {paper.authors.join(", ")} · {paper.venue} {paper.year}
                   </p>
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[paper.status] || statusColors.PENDING}`}
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    statusColors[paper.status] || statusColors.PENDING
+                  }`}
                 >
                   {statusLabels[paper.status] || paper.status}
                 </span>
