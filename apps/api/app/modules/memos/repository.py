@@ -54,14 +54,10 @@ class MemoRepository:
     async def get_by_uid(self, uid: str) -> list[dict]:
         """ユーザーのメモ一覧を取得"""
         query = self._get_db().collection(self.COLLECTION).where("ownerUid", "==", uid).order_by("updatedAt", direction="DESCENDING")
-        docs = await query.stream()
         
         results = []
-        for doc in docs:
+        async for doc in query.stream():
             data = doc.to_dict()
-            # 簡略化のためRefは一覧では取らないか、必要なら別途取得。ここでは空リストで返すパターンもアリだが、
-            # Documentのフィールドとして保持していないのでSubCollection取得が必要。
-            # いったん一覧ではTagsなどが取れればOKとする。
             results.append(self._to_snake(data, []))
         return results
 
@@ -76,9 +72,8 @@ class MemoRepository:
         data = doc.to_dict()
         
         # Refs取得
-        refs_docs = await doc_ref.collection(self.SUB_COLLECTION_REFS).stream()
         refs = []
-        for r in refs_docs:
+        async for r in doc_ref.collection(self.SUB_COLLECTION_REFS).stream():
             rd = r.to_dict()
             refs.append(MemoRef(
                 ref_type=rd.get("refType"),

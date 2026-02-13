@@ -19,29 +19,40 @@ class SearchService:
         source = "semantic_scholar"
         raw_data = {}
         
+        # Priority: Gemini -> Semantic Scholar (Fallback)
+        # As requested by user "make it work with Gemini"
+        
+        # 1. Try Gemini
+        if self.gemini_client.api_key:
+            try:
+                raw_data = await self.gemini_client.search_papers(query, limit=limit)
+                source = "gemini"
+                
+                items = []
+                for paper in raw_data.get("data", []):
+                    items.append(self._normalize_paper(paper, source))
+
+                return SearchResultListResponse(
+                    results=items,
+                    total=raw_data.get("total", 0),
+                    offset=offset,
+                    limit=limit
+                )
+            except Exception as e:
+                print(f"Gemini API Error: {e}")
+                # Fallthrough to Semantic Scholar
+        
+        # 2. Try Semantic Scholar
+        print("Using Semantic Scholar...")
         try:
-            # Try Semantic Scholar first
             raw_data = await self.api_client.search_papers(query, offset=offset, limit=limit)
+            source = "semantic_scholar"
         except Exception as e:
             print(f"Semantic Scholar API Error: {e}")
-            
-            # Fallback to Gemini if configured
-            if self.gemini_client.api_key:
-                try:
-                    print("Falling back to Gemini...")
-                    raw_data = await self.gemini_client.search_papers(query, limit=limit)
-                    source = "gemini"
-                except Exception as gemini_e:
-                    print(f"Gemini API Error: {gemini_e}")
-                    # If both fail, raise the original error (or appropriate status)
-                    if "429" in str(e):
-                         raise HTTPException(status_code=429, detail="検索APIのレート制限に達しました。")
-                    raise HTTPException(status_code=503, detail="検索サービスが利用できません。")
-            else:
-                # No fallback key
-                if "429" in str(e):
-                    raise HTTPException(status_code=429, detail="検索APIのレート制限に達しました。")
-                raise HTTPException(status_code=503, detail="検索サービスが一時的に利用できません。")
+            from fastapi import HTTPException
+            if "429" in str(e):
+                 raise HTTPException(status_code=429, detail="検索APIのレート制限に達しました。")
+            raise HTTPException(status_code=503, detail="検索サービスが利用できません。")
 
         items = []
         for paper in raw_data.get("data", []):

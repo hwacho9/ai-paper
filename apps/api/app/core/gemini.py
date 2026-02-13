@@ -3,13 +3,16 @@ Gemini API Client (Fallback for Paper Search)
 """
 import httpx
 import json
+import os
 from app.core.config import settings
 
 class GeminiClient:
-    BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-
+    # BASE_URL will be constructed dynamically
+    
     def __init__(self):
         self.api_key = settings.google_api_key
+        self.model_name = os.getenv("GOOGLE_MODEL_NAME", "gemini-1.5-flash")
+        self.base_url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent"
 
     async def search_papers(self, query: str, limit: int = 10) -> dict:
         """
@@ -45,7 +48,7 @@ class GeminiClient:
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.BASE_URL}?key={self.api_key}",
+                f"{self.base_url}?key={self.api_key}",
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {"response_mime_type": "application/json"}
