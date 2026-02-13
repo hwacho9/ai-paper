@@ -67,8 +67,10 @@ class PaperRepository:
 
     async def get_user_likes(self, uid: str) -> list[str]:
         """ユーザーのいいねした論文IDリストを取得"""
-        docs = await self._get_db().collection(self.COLLECTION_USERS).document(uid).collection(self.SUB_COLLECTION_LIKES).stream()
-        return [doc.id for doc in docs]
+        result = []
+        async for doc in self._get_db().collection(self.COLLECTION_USERS).document(uid).collection(self.SUB_COLLECTION_LIKES).stream():
+            result.append(doc.id)
+        return result
 
     async def get_papers_by_ids(self, paper_ids: list[str]) -> list[dict]:
         """複数のIDから論文を一括取得"""
