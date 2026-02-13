@@ -5,8 +5,10 @@
  * グリッド/リスト切替 + ソート + フィルター
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { getLibrary, PaperResponse } from "@/lib/api";
+import { toast } from "sonner";
 
 type ViewMode = "grid" | "list";
 
@@ -20,69 +22,37 @@ const statusColors: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   READY: "完了",
   INGESTING: "処理中",
-  PENDING: "保留",
+  PENDING: "保存済",
   FAILED: "失敗",
 };
 
-const papers = [
-  {
-    id: "1",
-    title: "Attention Is All You Need",
-    authors: ["Vaswani, A.", "Shazeer, N."],
-    year: 2017,
-    venue: "NeurIPS",
-    status: "READY",
-    keywords: ["Transformer", "Self-Attention"],
-  },
-  {
-    id: "2",
-    title: "BERT: Pre-training of Deep Bidirectional Transformers",
-    authors: ["Devlin, J.", "Chang, M."],
-    year: 2019,
-    venue: "NAACL",
-    status: "READY",
-    keywords: ["BERT", "NLP"],
-  },
-  {
-    id: "3",
-    title: "Language Models are Few-Shot Learners",
-    authors: ["Brown, T.", "Mann, B."],
-    year: 2020,
-    venue: "NeurIPS",
-    status: "INGESTING",
-    keywords: ["GPT-3", "Few-Shot"],
-  },
-  {
-    id: "4",
-    title: "An Image is Worth 16x16 Words: ViT",
-    authors: ["Dosovitskiy, A."],
-    year: 2021,
-    venue: "ICLR",
-    status: "READY",
-    keywords: ["ViT", "Vision"],
-  },
-  {
-    id: "5",
-    title: "Scaling Laws for Neural Language Models",
-    authors: ["Kaplan, J.", "McCandlish, S."],
-    year: 2020,
-    venue: "arXiv",
-    status: "READY",
-    keywords: ["Scaling", "LLM"],
-  },
-  {
-    id: "6",
-    title: "Constitutional AI",
-    authors: ["Bai, Y.", "Kadavath, S."],
-    year: 2022,
-    venue: "arXiv",
-    status: "PENDING",
-    keywords: ["RLHF", "Safety"],
-  },
-];
-
 export default function LibraryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [papers, setPapers] = useState<PaperResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchLibrary = async () => {
+      try {
+        const data = await getLibrary();
+        setPapers(data.papers);
+      } catch (err) {
+        console.error(err);
+        toast.error("ライブラリの取得に失敗しました");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLibrary();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="p-12 text-center text-muted-foreground">
+        読み込み中...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -153,17 +123,26 @@ export default function LibraryPage() {
         ))}
       </div>
 
-      {/* グリッドビュー */}
-      {viewMode === "grid" ? (
+      {papers.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>ライブラリは空です。検索から論文を追加してください。</p>
+          <Link
+            href="/search"
+            className="text-primary hover:underline mt-2 inline-block"
+          >
+            論文を検索する
+          </Link>
+        </div>
+      ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {papers.map((paper) => (
             <Link key={paper.id} href={`/papers/${paper.id}`}>
               <div className="glass-card group h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow">
                 <div className="flex items-start justify-between">
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[paper.status]}`}
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[paper.status] || statusColors.PENDING}`}
                   >
-                    {statusLabels[paper.status]}
+                    {statusLabels[paper.status] || paper.status}
                   </span>
                   <button className="text-red-400 transition-transform hover:scale-110">
                     ❤️
@@ -178,18 +157,6 @@ export default function LibraryPage() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   {paper.venue} {paper.year}
                 </p>
-                {paper.keywords.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {paper.keywords.map((kw) => (
-                      <span
-                        key={kw}
-                        className="rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
-                      >
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
             </Link>
           ))}
@@ -210,9 +177,9 @@ export default function LibraryPage() {
                   </p>
                 </div>
                 <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[paper.status]}`}
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[paper.status] || statusColors.PENDING}`}
                 >
-                  {statusLabels[paper.status]}
+                  {statusLabels[paper.status] || paper.status}
                 </span>
               </div>
             </Link>

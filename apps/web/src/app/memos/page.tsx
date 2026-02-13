@@ -5,65 +5,45 @@
  * 全メモの横断検索 + フィルター + 新規作成
  */
 
-import { useState } from "react";
-
-const memos = [
-  {
-    id: "1",
-    title: "Self-Attentionの計算量メモ",
-    body: "Self-Attentionの計算量はO(n²d)。シーケンス長nに対して二乗のためLong-Contextでは問題になる。Flash Attentionなどのカーネル最適化が有効。Linearized Attentionも検討の余地あり。",
-    paperTitle: "Attention Is All You Need",
-    paperId: "1",
-    updatedAt: "2時間前",
-    color: "border-l-blue-500",
-  },
-  {
-    id: "2",
-    title: "BERTとGPTの違いまとめ",
-    body: "BERTは双方向エンコーダ（MLM + NSP）、GPTは自己回帰デコーダ。タスクに応じた使い分けが重要。分類タスクはBERT系、生成タスクはGPT系が優位。",
-    paperTitle: "BERT: Pre-training of Deep Bidirectional Transformers",
-    paperId: "2",
-    updatedAt: "昨日",
-    color: "border-l-emerald-500",
-  },
-  {
-    id: "3",
-    title: "In-Context Learningのメカニズム",
-    body: "GPT-3はプロンプト内の例示（few-shot）からパターンを学習する。モデルサイズに依存し、小型モデルでは発現しにくい。Meta-learningとの関連が指摘されている。",
-    paperTitle: "Language Models are Few-Shot Learners",
-    paperId: "3",
-    updatedAt: "3日前",
-    color: "border-l-purple-500",
-  },
-  {
-    id: "4",
-    title: "ViTのパッチ分割戦略",
-    body: "画像を16×16のパッチに分割し、各パッチを線形射影でembeddingに変換。位置エンコーディングは学習可能。CNNと異なりinductive biasが少ないため大規模データが必要。",
-    paperTitle: "An Image is Worth 16x16 Words: ViT",
-    paperId: "4",
-    updatedAt: "1週間前",
-    color: "border-l-amber-500",
-  },
-  {
-    id: "5",
-    title: "スケーリング則の要点",
-    body: "損失はパラメータ数N、データ量D、計算量Cのべき乗則に従う。最適なN/D比はChinchillaで修正された。計算予算が決まればN/Dの最適バランスを理論的に算出可能。",
-    paperTitle: "Scaling Laws for Neural Language Models",
-    paperId: "5",
-    updatedAt: "2週間前",
-    color: "border-l-rose-500",
-  },
-];
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { getMemos, MemoResponse } from "@/lib/api";
+import { toast } from "sonner";
 
 export default function MemosPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showEditor, setShowEditor] = useState(false);
+  const [memos, setMemos] = useState<MemoResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMemos = async () => {
+      try {
+        const data = await getMemos();
+        setMemos(data.memos);
+      } catch (err) {
+        console.error(err);
+        toast.error("メモの取得に失敗しました");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMemos();
+  }, []);
 
   const filtered = memos.filter(
     (m) =>
       m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       m.body.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  if (loading) {
+    return (
+      <div className="p-12 text-center text-muted-foreground">
+        読み込み中...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -123,109 +103,74 @@ export default function MemosPage() {
       </div>
 
       {/* メモ一覧 */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {filtered.map((memo) => (
-          <div
-            key={memo.id}
-            className={`glass-card group rounded-xl border-l-4 ${memo.color} p-5 transition-all duration-200 hover:scale-[1.01] hover:border-primary/30`}
-          >
-            <h3 className="font-semibold group-hover:text-primary transition-colors">
-              {memo.title}
-            </h3>
-            <p className="mt-2 text-sm text-muted-foreground line-clamp-3">
-              {memo.body}
-            </p>
-            <div className="mt-3 flex items-center justify-between">
-              <a
-                href={`/papers/${memo.paperId}`}
-                className="flex items-center gap-1.5 text-xs text-primary/70 hover:text-primary transition-colors"
-              >
-                <svg
-                  className="h-3 w-3"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.07-9.07l-1.757 1.757a4.5 4.5 0 01-6.364 6.364l4.5-4.5a4.5 4.5 0 017.244 1.242z"
-                  />
-                </svg>
-                {memo.paperTitle}
-              </a>
-              <span className="text-xs text-muted-foreground">
-                {memo.updatedAt}
-              </span>
+      {filtered.length === 0 ? (
+        <div className="mt-8 text-center text-muted-foreground">
+          {searchQuery
+            ? "該当するメモが見つかりません"
+            : "メモがまだありません"}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {filtered.map((memo) => (
+            <div
+              key={memo.id}
+              className={`glass-card group rounded-xl border-l-4 border-l-primary p-5 transition-all duration-200 hover:scale-[1.01] hover:border-primary/30`}
+            >
+              <h3 className="font-semibold group-hover:text-primary transition-colors">
+                {memo.title}
+              </h3>
+              <p className="mt-2 text-sm text-muted-foreground line-clamp-3 whitespace-pre-wrap">
+                {memo.body}
+              </p>
+              <div className="mt-3 flex items-center justify-between">
+                {memo.refs.length > 0 && memo.refs[0].ref_type === "paper" ? (
+                  <Link
+                    href={`/papers/${memo.refs[0].ref_id}`}
+                    className="flex items-center gap-1.5 text-xs text-primary/70 hover:text-primary transition-colors"
+                  >
+                    <svg
+                      className="h-3 w-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth={1.5}
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.07-9.07l-1.757 1.757a4.5 4.5 0 01-6.364 6.364l4.5-4.5a4.5 4.5 0 017.244 1.242z"
+                      />
+                    </svg>
+                    関連論文へ
+                  </Link>
+                ) : (
+                  <span></span>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {memo.updated_at
+                    ? new Date(memo.updated_at).toLocaleDateString()
+                    : ""}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
-
-      {filtered.length === 0 && (
-        <div className="mt-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-            <span className="text-3xl">📝</span>
-          </div>
-          <p className="text-muted-foreground">
-            {searchQuery
-              ? "該当するメモが見つかりません"
-              : "メモがまだありません"}
-          </p>
+          ))}
         </div>
       )}
 
-      {/* エディタダイアログ */}
+      {/* エディタダイアログ（モック） */}
       {showEditor && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="glass-card w-full max-w-lg rounded-2xl p-6 mx-4">
             <h3 className="text-lg font-semibold">新規メモ</h3>
-            <div className="mt-4 space-y-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  タイトル
-                </label>
-                <input
-                  type="text"
-                  placeholder="メモのタイトル"
-                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  本文
-                </label>
-                <textarea
-                  placeholder="メモの内容を入力..."
-                  rows={6}
-                  className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none resize-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">
-                  紐付け論文
-                </label>
-                <select className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary">
-                  <option value="">選択してください</option>
-                  <option>Attention Is All You Need</option>
-                  <option>BERT</option>
-                  <option>GPT-3</option>
-                </select>
-              </div>
-            </div>
+            <p className="text-sm text-muted-foreground mt-2">
+              手動作成機能は開発中です。検索結果から論文を「いいね」すると自動的にメモが作成されます。
+            </p>
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setShowEditor(false)}
                 className="rounded-lg px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
-                キャンセル
-              </button>
-              <button
-                onClick={() => setShowEditor(false)}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-95"
-              >
-                保存
+                閉じる
               </button>
             </div>
           </div>

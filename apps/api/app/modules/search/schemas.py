@@ -1,26 +1,30 @@
-"""D-04: 論文検索 - スキーマ"""
+"""
+D-04: 論文検索 - スキーマ
+"""
+from pydantic import BaseModel, Field
 
-from pydantic import BaseModel
-
+class SearchQuery(BaseModel):
+    q: str = Field(..., description="検索キーワード")
+    year_from: int | None = None
+    year_to: int | None = None
+    limit: int = 20
+    offset: int = 0
 
 class SearchResultItem(BaseModel):
-    """検索結果 1件"""
     external_id: str
-    source: str
+    source: str = "semantic_scholar"
     title: str
-    authors: list[str] = []
-    year: int | None = None
-    venue: str = ""
-    abstract: str = ""
-    doi: str | None = None
-    arxiv_id: str | None = None
-    pdf_url: str | None = None
-    citation_count: int | None = None
+    authors: list[str]
+    year: int | None
+    venue: str
+    abstract: str
+    doi: str | None
+    arxiv_id: str | None
+    pdf_url: str | None
+    citation_count: int | None
     is_in_library: bool = False
 
-
 class SearchResultListResponse(BaseModel):
-    """検索結果リスト"""
     results: list[SearchResultItem]
     total: int
     offset: int

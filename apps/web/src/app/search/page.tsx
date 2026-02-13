@@ -6,68 +6,99 @@
  */
 
 import { useState } from "react";
+import {
+  searchPapers,
+  SearchResultItem,
+  toggleLike,
+  PaperCreate,
+} from "@/lib/api";
+import { useAuth } from "@/components/auth/auth-context";
+import { toast } from "sonner";
 
-const mockResults = [
-  {
-    externalId: "1",
-    title: "Attention Is All You Need",
-    authors: ["Vaswani, A.", "Shazeer, N.", "Parmar, N.", "Uszkoreit, J."],
-    year: 2017,
-    venue: "NeurIPS",
-    abstract:
-      "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks. We propose a new simple network architecture, the Transformer...",
-    citationCount: 95000,
-    isInLibrary: true,
-  },
-  {
-    externalId: "2",
-    title:
-      "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
-    authors: ["Devlin, J.", "Chang, M.", "Lee, K.", "Toutanova, K."],
-    year: 2019,
-    venue: "NAACL",
-    abstract:
-      "We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers...",
-    citationCount: 72000,
-    isInLibrary: false,
-  },
-  {
-    externalId: "3",
-    title: "Language Models are Few-Shot Learners (GPT-3)",
-    authors: ["Brown, T.", "Mann, B.", "Ryder, N.", "Subbiah, M."],
-    year: 2020,
-    venue: "NeurIPS",
-    abstract:
-      "Recent work has demonstrated substantial gains on many NLP tasks and benchmarks by pre-training on a large corpus of text followed by fine-tuning...",
-    citationCount: 28000,
-    isInLibrary: false,
-  },
-  {
-    externalId: "4",
-    title:
-      "An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale",
-    authors: ["Dosovitskiy, A.", "Beyer, L.", "Kolesnikov, A."],
-    year: 2021,
-    venue: "ICLR",
-    abstract:
-      "While the Transformer architecture has become the de-facto standard for natural language processing tasks, its applications to computer vision remain limited...",
-    citationCount: 32000,
-    isInLibrary: true,
-  },
-];
-
-function formatCitations(count: number): string {
+function formatCitations(count: number | null): string {
+  if (!count) return "0";
   if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
   return String(count);
 }
 
 export default function SearchPage() {
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResultItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (query.trim()) setHasSearched(true);
+    if (!query.trim()) return;
+
+    setLoading(true);
+    setError("");
+    setHasSearched(true);
+
+    try {
+      const data = await searchPapers({ q: query, limit: 20 });
+      setResults(data.results);
+    } catch (err: any) {
+      // eslint-disable-line @typescript-eslint/no-explicit-any
+      console.error(err);
+      setError(err.message || "検索中にエラーが発生しました");
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLike = async (paper: SearchResultItem) => {
+    if (!user) {
+      toast.error("ライブラリ機能を使用するにはログインが必要です");
+      return;
+    }
+
+    // 楽観的UI更新
+    const originalResults = [...results];
+    setResults(
+      results.map((p) =>
+        p.external_id === paper.external_id
+          ? { ...p, is_in_library: !p.is_in_library }
+          : p,
+      ),
+    );
+
+    try {
+      const paperData: PaperCreate = {
+        external_id: paper.external_id,
+        source: paper.source,
+        title: paper.title,
+        authors: paper.authors,
+        year: paper.year,
+        venue: paper.venue,
+        abstract: paper.abstract,
+        doi: paper.doi,
+        arxiv_id: paper.arxiv_id,
+        pdf_url: paper.pdf_url,
+      };
+
+      const isLiked = await toggleLike(paper.external_id, paperData);
+
+      // サーバーの結果で確定
+      setResults((current) =>
+        current.map((p) =>
+          p.external_id === paper.external_id
+            ? { ...p, is_in_library: isLiked }
+            : p,
+        ),
+      );
+
+      toast.success(
+        isLiked ? "ライブラリに追加しました" : "ライブラリから削除しました",
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error("操作に失敗しました");
+      setResults(originalResults); // ロールバック
+    }
   };
 
   return (
@@ -108,44 +139,35 @@ export default function SearchPage() {
           />
           <button
             type="submit"
+            disabled={loading}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground
-              transition-all hover:bg-primary/90 active:scale-95"
+              transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
           >
-            検索
+            {loading ? "検索中..." : "検索"}
           </button>
         </div>
       </form>
 
-      {/* フィルター */}
-      <div className="mx-auto flex max-w-2xl flex-wrap items-center gap-2">
-        <span className="text-sm text-muted-foreground">フィルター:</span>
-        {["すべて", "2024", "2023", "2020+", "高引用"].map((filter, i) => (
-          <button
-            key={filter}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              i === 0
-                ? "bg-primary/20 text-primary"
-                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
-          >
-            {filter}
-          </button>
-        ))}
-      </div>
+      {/* エラー表示 */}
+      {error && (
+        <div className="mx-auto max-w-2xl rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       {/* 検索結果 */}
-      {hasSearched && (
+      {hasSearched && !loading && !error && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
             <span className="font-medium text-foreground">
-              {mockResults.length}
+              {results.length}
             </span>{" "}
             件の結果
           </p>
           <div className="space-y-3">
-            {mockResults.map((paper) => (
+            {results.map((paper) => (
               <div
-                key={paper.externalId}
+                key={paper.external_id}
                 className="glass-card group rounded-xl p-5 transition-all duration-200 hover:border-primary/30"
               >
                 <div className="flex items-start justify-between gap-4">
@@ -157,54 +179,67 @@ export default function SearchPage() {
                       {paper.authors.join(", ")}
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground/80 line-clamp-2">
-                      {paper.abstract}
+                      {paper.abstract || "要約なし"}
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                       <span className="rounded-md bg-muted px-2 py-1 font-medium">
-                        {paper.venue} {paper.year}
+                        {paper.venue || "Unknown Venue"} {paper.year || ""}
                       </span>
                       <span className="text-muted-foreground">
-                        引用: {formatCitations(paper.citationCount)}
+                        引用: {formatCitations(paper.citation_count)}
                       </span>
+                      {paper.pdf_url && (
+                        <a
+                          href={paper.pdf_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-primary hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <svg
+                            className="h-3 w-3"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={1.5}
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                            />
+                          </svg>
+                          PDF
+                        </a>
+                      )}
                     </div>
                   </div>
                   <div className="flex flex-col items-center gap-2">
                     <button
+                      onClick={() => handleLike(paper)}
                       className={`rounded-lg p-2 transition-all hover:scale-110 ${
-                        paper.isInLibrary
+                        paper.is_in_library
                           ? "bg-primary/20 text-primary"
                           : "bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary"
                       }`}
                       title={
-                        paper.isInLibrary
+                        paper.is_in_library
                           ? "ライブラリに追加済み"
                           : "ライブラリに追加"
                       }
                     >
-                      {paper.isInLibrary ? "❤️" : "🤍"}
+                      {paper.is_in_library ? "❤️" : "🤍"}
                     </button>
-                    <button
-                      className="rounded-lg bg-muted p-2 text-muted-foreground transition-all hover:bg-primary/20 hover:text-primary"
-                      title="プロジェクトに追加"
-                    >
-                      <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={1.5}
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M12 4.5v15m7.5-7.5h-15"
-                        />
-                      </svg>
-                    </button>
+                    {/* Project functionality can be added here later */}
                   </div>
                 </div>
               </div>
             ))}
+            {results.length === 0 && (
+              <div className="py-12 text-center text-muted-foreground">
+                検索結果が見つかりませんでした
+              </div>
+            )}
           </div>
         </div>
       )}

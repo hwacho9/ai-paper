@@ -1,39 +1,32 @@
-"""D-08: メモ & ノート - スキーマ"""
-
+"""
+D-08: メモ & ノート - スキーマ
+"""
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-
-class MemoRefCreate(BaseModel):
-    """メモ参照作成"""
-    ref_type: str  # "paper" | "project" | "chunk" | "keyword"
+class MemoRef(BaseModel):
+    ref_type: str = Field(..., description="paper | project | chunk | keyword")
     ref_id: str
     note: str | None = None
 
-
 class MemoCreate(BaseModel):
-    """メモ作成リクエスト"""
     title: str = ""
     body: str = ""
     tags: list[str] = []
-    refs: list[MemoRefCreate] = []
-
-
-class MemoRefResponse(BaseModel):
-    """メモ参照レスポンス"""
-    ref_type: str
-    ref_id: str
-    note: str | None = None
-
+    refs: list[MemoRef] = []
+    status: str = "draft"
 
 class MemoResponse(BaseModel):
-    """メモレスポンス"""
     id: str
     owner_uid: str
     title: str
     body: str
-    status: str = "draft"
-    tags: list[str] = []
-    refs: list[MemoRefResponse] = []
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
+    status: str
+    created_at: datetime | None
+    updated_at: datetime | None
+    tags: list[str]
+    refs: list[MemoRef]
+
+class MemoListResponse(BaseModel):
+    memos: list[MemoResponse]
+    total: int
