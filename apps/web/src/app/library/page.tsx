@@ -2,12 +2,12 @@
 
 /**
  * マイライブラリ — いいね済み論文一覧
- * グリッド/リスト切替 + ソート + フィルター
+ * グリッド/リスト切替 + ソート + フィルター + メモ連携
  */
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { getLibrary, PaperResponse } from "@/lib/api";
+import { getLibrary, getMemos, PaperResponse, MemoResponse } from "@/lib/api";
 import { toast } from "sonner";
 
 type ViewMode = "grid" | "list";
@@ -29,22 +29,34 @@ const statusLabels: Record<string, string> = {
 export default function LibraryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [papers, setPapers] = useState<PaperResponse[]>([]);
+  const [memos, setMemos] = useState<MemoResponse[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchLibrary = async () => {
+    const fetchData = async () => {
       try {
-        const data = await getLibrary();
-        setPapers(data.papers);
+        const [libraryData, memosData] = await Promise.all([
+          getLibrary(),
+          getMemos(),
+        ]);
+        setPapers(libraryData.papers);
+        setMemos(memosData.memos);
       } catch (err) {
         console.error(err);
-        toast.error("ライブラリの取得に失敗しました");
+        toast.error("データの取得に失敗しました");
       } finally {
         setLoading(false);
       }
     };
-    fetchLibrary();
+    fetchData();
   }, []);
+
+  // 論文ごとのメモ数を計算
+  const getMemoCount = (paperId: string) => {
+    return memos.filter((m) =>
+      m.refs.some((r) => r.ref_type === "paper" && r.ref_id === paperId),
+    ).length;
+  };
 
   if (loading) {
     return (
@@ -69,7 +81,11 @@ export default function LibraryPage() {
           <div className="flex rounded-lg border border-border bg-muted/30">
             <button
               onClick={() => setViewMode("grid")}
-              className={`rounded-l-lg p-2 transition-colors ${viewMode === "grid" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              className={`rounded-l-lg p-2 transition-colors ${
+                viewMode === "grid"
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               <svg
                 className="h-4 w-4"
@@ -87,7 +103,11 @@ export default function LibraryPage() {
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`rounded-r-lg p-2 transition-colors ${viewMode === "list" ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              className={`rounded-r-lg p-2 transition-colors ${
+                viewMode === "list"
+                  ? "bg-primary/20 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
               <svg
                 className="h-4 w-4"
@@ -135,55 +155,101 @@ export default function LibraryPage() {
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {papers.map((paper) => (
-            <Link key={paper.id} href={`/papers/${paper.id}`}>
-              <div className="glass-card group h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow">
-                <div className="flex items-start justify-between">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[paper.status] || statusColors.PENDING}`}
-                  >
-                    {statusLabels[paper.status] || paper.status}
-                  </span>
-                  <button className="text-red-400 transition-transform hover:scale-110">
-                    ❤️
-                  </button>
+          {papers.map((paper) => {
+            const memoCount = getMemoCount(paper.id);
+            return (
+              <Link key={paper.id} href={`/papers/${paper.id}`}>
+                <div className="glass-card group h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow flex flex-col">
+                  <div className="flex items-start justify-between mb-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        statusColors[paper.status] || statusColors.PENDING
+                      }`}
+                    >
+                      {statusLabels[paper.status] || paper.status}
+                    </span>
+                    <div className="flex gap-2">
+                      {memoCount > 0 && (
+                        <div className="flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-500">
+                          <svg
+                            className="h-3 w-3"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={1.5}
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+                            />
+                          </svg>
+                          {memoCount}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <h3 className="font-semibold leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                    {paper.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground truncate">
+                    {paper.authors.join(", ")}
+                  </p>
+                  <p className="mt-auto pt-2 text-xs text-muted-foreground">
+                    {paper.venue} {paper.year}
+                  </p>
                 </div>
-                <h3 className="mt-3 font-semibold leading-snug group-hover:text-primary transition-colors line-clamp-2">
-                  {paper.title}
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground truncate">
-                  {paper.authors.join(", ")}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {paper.venue} {paper.year}
-                </p>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       ) : (
         /* リストビュー */
         <div className="space-y-2">
-          {papers.map((paper) => (
-            <Link key={paper.id} href={`/papers/${paper.id}`}>
-              <div className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
-                <button className="text-red-400 text-sm">❤️</button>
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-medium group-hover:text-primary transition-colors truncate">
-                    {paper.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground truncate">
-                    {paper.authors.join(", ")} · {paper.venue} {paper.year}
-                  </p>
+          {papers.map((paper) => {
+            const memoCount = getMemoCount(paper.id);
+            return (
+              <Link key={paper.id} href={`/papers/${paper.id}`}>
+                <div className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium group-hover:text-primary transition-colors truncate">
+                        {paper.title}
+                      </h3>
+                      {memoCount > 0 && (
+                        <span className="flex items-center gap-0.5 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-500">
+                          <svg
+                            className="h-3 w-3"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={1.5}
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+                            />
+                          </svg>
+                          {memoCount}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {paper.authors.join(", ")} · {paper.venue} {paper.year}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      statusColors[paper.status] || statusColors.PENDING
+                    }`}
+                  >
+                    {statusLabels[paper.status] || paper.status}
+                  </span>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[paper.status] || statusColors.PENDING}`}
-                >
-                  {statusLabels[paper.status] || paper.status}
-                </span>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
