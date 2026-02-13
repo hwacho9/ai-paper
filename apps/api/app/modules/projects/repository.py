@@ -47,11 +47,12 @@ class ProjectRepository:
             self._get_db()
             .collection(self.COLLECTION)
             .where("ownerUid", "==", owner_uid)
-            .order_by("updatedAt", direction="DESCENDING")
         )
         results = []
         async for doc in query.stream():
             results.append(self._to_snake(doc.to_dict(), doc.id))
+        # Python側でupdatedAtの降順ソート
+        results.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
         return results
 
     async def update(self, project_id: str, owner_uid: str, data: dict) -> dict | None:
