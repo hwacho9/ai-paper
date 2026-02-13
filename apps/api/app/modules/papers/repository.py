@@ -81,10 +81,9 @@ class PaperRepository:
         # For simple implementations, loop or chunking. Let's start with loop for safety or batches
         # Efficient way: getAll
         refs = [self._get_db().collection(self.COLLECTION_PAPERS).document(pid) for pid in paper_ids]
-        docs = await self._get_db().get_all(refs)
         
         results = []
-        for doc in docs:
+        async for doc in self._get_db().get_all(refs):
             if doc.exists:
                 results.append(self._to_snake(doc.to_dict(), doc.id))
         return results
