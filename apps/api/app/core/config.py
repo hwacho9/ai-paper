@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # CORS
     cors_allow_origins: str = "http://localhost:3000"
 
+    # Semantic Scholar
+    semantic_scholar_api_key: str | None = None
+
     @property
     def cors_allow_origins_list(self) -> list[str]:
         """CORS許可オリジンをリストで返す"""

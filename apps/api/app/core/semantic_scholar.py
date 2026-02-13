@@ -63,5 +63,7 @@ class SemanticScholarClient:
             response.raise_for_status()
             return response.json()
 
-# Singleton instance (API key to be injected via env in production if needed)
-semantic_scholar = SemanticScholarClient()
+from app.core.config import settings
+
+# Singleton instance
+semantic_scholar = SemanticScholarClient(api_key=settings.semantic_scholar_api_key)

@@ -12,8 +12,16 @@ class SearchService:
         """
         論文を検索し、内部スキーマに正規化して返す。
         """
-        raw_data = await self.api_client.search_papers(query, offset=offset, limit=limit)
-        
+        try:
+            raw_data = await self.api_client.search_papers(query, offset=offset, limit=limit)
+        except Exception as e:
+            # Handle rate limits or other API errors
+            print(f"Semantic Scholar API Error: {e}")
+            from fastapi import HTTPException
+            if "429" in str(e):
+                raise HTTPException(status_code=429, detail="検索APIのレート制限に達しました。しばらく待ってから再試行してください。")
+            raise HTTPException(status_code=503, detail="検索サービスが一時的に利用できません。")
+
         items = []
         for paper in raw_data.get("data", []):
             items.append(self._normalize_paper(paper))
