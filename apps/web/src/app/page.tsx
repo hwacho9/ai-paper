@@ -5,7 +5,38 @@
  * 統計カード + 最近の論文 + プロジェクト + メモ
  */
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { apiGet } from "@/lib/api/client";
+
+interface DashboardProject {
+  id: string;
+  title: string;
+  paper_count: number;
+  updated_at: string | null;
+}
+
+interface ProjectListResponse {
+  projects: DashboardProject[];
+  total: number;
+}
+
+function formatRelativeTime(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "たった今";
+  if (diffMin < 60) return `${diffMin}分前`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}時間前`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}日前`;
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks < 4) return `${diffWeeks}週間前`;
+  return date.toLocaleDateString("ja-JP");
+}
 
 // ダミーデータ（後でAPI連携に置き換え）
 const stats = [
@@ -45,15 +76,7 @@ const recentPapers = [
   },
 ];
 
-const recentProjects = [
-  { id: "1", title: "Transformer Survey", paperCount: 8, updatedAt: "2時間前" },
-  {
-    id: "2",
-    title: "Few-shot Learning研究",
-    paperCount: 12,
-    updatedAt: "昨日",
-  },
-];
+// recentProjects is now fetched from API
 
 const statusColors = {
   READY: "bg-emerald-500/20 text-emerald-400",
@@ -70,6 +93,14 @@ const statusLabels = {
 };
 
 export default function DashboardPage() {
+  const [recentProjects, setRecentProjects] = useState<DashboardProject[]>([]);
+
+  useEffect(() => {
+    apiGet<ProjectListResponse>("/api/v1/projects")
+      .then((data) => setRecentProjects(data.projects.slice(0, 3)))
+      .catch(() => setRecentProjects([]));
+  }, []);
+
   return (
     <div className="space-y-8">
       {/* ウェルカムセクション */}
@@ -172,8 +203,8 @@ export default function DashboardPage() {
                   <div className="glass-card rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
                     <h4 className="font-medium">{project.title}</h4>
                     <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>{project.paperCount} 論文</span>
-                      <span>{project.updatedAt}</span>
+                      <span>{project.paper_count} 論文</span>
+                      <span>{formatRelativeTime(project.updated_at)}</span>
                     </div>
                   </div>
                 </Link>

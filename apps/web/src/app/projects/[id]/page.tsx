@@ -2,80 +2,42 @@
 
 /**
  * プロジェクト詳細ページ
+ * Firestore からプロジェクトデータを取得して表示
  * タブ切替: 参照論文 / メモ / BibTeX Export
  */
 
-import { useState, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
+import { apiGet, apiDelete } from "@/lib/api/client";
 
 type Tab = "papers" | "memos" | "export";
 
-const project = {
-  id: "1",
-  title: "Transformer Survey",
-  description:
-    "Transformer系アーキテクチャの進化と応用に関するサーベイ論文プロジェクト",
-};
-
-const projectPapers = [
-  {
-    id: "1",
-    title: "Attention Is All You Need",
-    authors: "Vaswani et al.",
-    year: 2017,
-    venue: "NeurIPS",
-  },
-  {
-    id: "2",
-    title: "BERT: Pre-training of Deep Bidirectional Transformers",
-    authors: "Devlin et al.",
-    year: 2019,
-    venue: "NAACL",
-  },
-  {
-    id: "3",
-    title: "Language Models are Few-Shot Learners",
-    authors: "Brown et al.",
-    year: 2020,
-    venue: "NeurIPS",
-  },
-  {
-    id: "4",
-    title: "An Image is Worth 16x16 Words: ViT",
-    authors: "Dosovitskiy et al.",
-    year: 2021,
-    venue: "ICLR",
-  },
-];
-
-const projectMemos = [
-  {
-    id: "1",
-    title: "Self-Attentionの計算量メモ",
-    body: "Self-Attentionの計算量はO(n²d)。シーケンス長nに対して二乗...",
-    updatedAt: "2時間前",
-  },
-  {
-    id: "2",
-    title: "BERTとGPTの違いまとめ",
-    body: "BERTは双方向、GPTは左から右。タスクに応じた使い分けが重要...",
-    updatedAt: "昨日",
-  },
-];
-
-const bibtexSample = `@inproceedings{vaswani2017attention,
-  title={Attention is all you need},
-  author={Vaswani, Ashish and Shazeer, Noam and Parmar, Niki},
-  booktitle={NeurIPS},
-  year={2017}
+interface Project {
+  id: string;
+  owner_uid: string;
+  title: string;
+  description: string;
+  paper_count: number;
+  status: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
-@inproceedings{devlin2019bert,
-  title={BERT: Pre-training of Deep Bidirectional Transformers},
-  author={Devlin, Jacob and Chang, Ming-Wei},
-  booktitle={NAACL},
-  year={2019}
-}`;
+interface ProjectPaper {
+  paper_id: string;
+  note: string;
+  role: string;
+  added_at: string | null;
+}
+
+interface PaperDetail {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string;
+  abstract: string;
+}
 
 export default function ProjectDetailPage({
   params,
@@ -84,10 +46,111 @@ export default function ProjectDetailPage({
 }) {
   const { id } = use(params);
   const [activeTab, setActiveTab] = useState<Tab>("papers");
+  const [project, setProject] = useState<Project | null>(null);
+  const [papers, setPapers] = useState<ProjectPaper[]>([]);
+  const [paperDetails, setPaperDetails] = useState<Map<string, PaperDetail>>(
+    new Map(),
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchProject = useCallback(async () => {
+    try {
+      setError(null);
+      const [projectData, papersData] = await Promise.all([
+        apiGet<Project>(`/api/v1/projects/${id}`),
+        apiGet<ProjectPaper[]>(`/api/v1/projects/${id}/papers`),
+      ]);
+      setProject(projectData);
+      setPapers(papersData);
+
+      // 論文の詳細を取得（papers コレクションから）
+      const details = new Map<string, PaperDetail>();
+      for (const paper of papersData) {
+        try {
+          const detail = await apiGet<PaperDetail>(
+            `/api/v1/library/${paper.paper_id}`,
+          );
+          details.set(paper.paper_id, detail);
+        } catch {
+          // 論文詳細が取得できなくても続行
+          details.set(paper.paper_id, {
+            id: paper.paper_id,
+            title: paper.paper_id,
+            authors: [],
+            year: null,
+            venue: "",
+            abstract: "",
+          });
+        }
+      }
+      setPaperDetails(details);
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : "プロジェクトの取得に失敗しました";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchProject();
+  }, [fetchProject]);
+
+  const handleRemovePaper = async (paperId: string) => {
+    if (!confirm("この論文をプロジェクトから削除しますか？")) return;
+    try {
+      await apiDelete(`/api/v1/projects/${id}/papers/${paperId}`);
+      setPapers((prev) => prev.filter((p) => p.paper_id !== paperId));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "削除に失敗しました";
+      alert(message);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="glass-card rounded-xl p-6">
+          <div className="h-4 w-24 bg-muted/50 rounded mb-3" />
+          <div className="h-7 w-2/3 bg-muted/50 rounded mb-2" />
+          <div className="h-4 w-full bg-muted/30 rounded" />
+        </div>
+        <div className="h-10 w-full bg-muted/30 rounded-xl" />
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <div
+              key={i}
+              className="glass-card rounded-xl p-4 h-20 bg-muted/20"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-center">
+          <p className="text-red-400">
+            {error || "プロジェクトが見つかりません"}
+          </p>
+          <Link
+            href="/projects"
+            className="mt-2 inline-block text-sm text-primary hover:underline"
+          >
+            ← プロジェクト一覧に戻る
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const tabs = [
-    { key: "papers" as Tab, label: "参照論文", count: projectPapers.length },
-    { key: "memos" as Tab, label: "メモ", count: projectMemos.length },
+    { key: "papers" as Tab, label: "参照論文", count: papers.length },
+    { key: "memos" as Tab, label: "メモ", count: null },
     { key: "export" as Tab, label: "BibTeX Export", count: null },
   ];
 
@@ -126,8 +189,7 @@ export default function ProjectDetailPage({
           </button>
         </div>
         <div className="mt-4 flex gap-4 text-sm text-muted-foreground">
-          <span>{projectPapers.length} 論文</span>
-          <span>{projectMemos.length} メモ</span>
+          <span>{papers.length} 論文</span>
           <span>ID: {id}</span>
         </div>
       </div>
@@ -160,74 +222,117 @@ export default function ProjectDetailPage({
         ))}
       </div>
 
-      {/* タブコンテンツ */}
+      {/* タブコンテンツ: 参照論文 */}
       {activeTab === "papers" && (
         <div className="space-y-3">
-          {projectPapers.map((paper) => (
-            <Link key={paper.id} href={`/papers/${paper.id}`}>
-              <div className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
+          {papers.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <div className="text-4xl mb-3">📄</div>
+              <p>まだ論文が追加されていません</p>
+            </div>
+          )}
+          {papers.map((paper) => {
+            const detail = paperDetails.get(paper.paper_id);
+            return (
+              <div
+                key={paper.paper_id}
+                className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30"
+              >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-sm font-bold">
-                  {paper.year.toString().slice(-2)}
+                  {detail?.year?.toString().slice(-2) || "??"}
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="font-medium group-hover:text-primary transition-colors truncate">
-                    {paper.title}
+                    {detail?.title || paper.paper_id}
                   </h4>
                   <p className="text-sm text-muted-foreground">
-                    {paper.authors} · {paper.venue} {paper.year}
+                    {detail?.authors?.join(", ") || ""}{" "}
+                    {detail?.venue && `· ${detail.venue}`}{" "}
+                    {detail?.year && detail.year}
                   </p>
                 </div>
-                <svg
-                  className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleRemovePaper(paper.paper_id);
+                  }}
+                  className="text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                  title="削除"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M8.25 4.5l7.5 7.5-7.5 7.5"
-                  />
-                </svg>
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
               </div>
-            </Link>
-          ))}
+            );
+          })}
           <button className="w-full rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
             + 論文を追加
           </button>
         </div>
       )}
 
+      {/* タブコンテンツ: メモ */}
       {activeTab === "memos" && (
-        <div className="space-y-3">
-          {projectMemos.map((memo) => (
-            <div
-              key={memo.id}
-              className="glass-card rounded-xl p-5 transition-all duration-200 hover:border-primary/30"
-            >
-              <h4 className="font-medium">{memo.title}</h4>
-              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-                {memo.body}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {memo.updatedAt}
-              </p>
-            </div>
-          ))}
+        <div className="text-center py-12 text-muted-foreground">
+          <div className="text-4xl mb-3">✏️</div>
+          <p>メモ機能は準備中です</p>
         </div>
       )}
 
+      {/* タブコンテンツ: BibTeX Export */}
       {activeTab === "export" && (
         <div className="glass-card rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h4 className="font-semibold">BibTeX</h4>
-            <button className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-all active:scale-95">
+            <button
+              onClick={() => {
+                // 簡易BibTeX生成
+                const bibtex = papers
+                  .map((p) => {
+                    const d = paperDetails.get(p.paper_id);
+                    if (!d) return "";
+                    const key = d.title
+                      .split(" ")[0]
+                      .toLowerCase()
+                      .replace(/[^a-z]/g, "");
+                    return `@article{${key}${d.year || ""},\n  title={${d.title}},\n  author={${d.authors?.join(" and ") || ""}},\n  year={${d.year || ""}}\n}`;
+                  })
+                  .filter(Boolean)
+                  .join("\n\n");
+                navigator.clipboard.writeText(bibtex);
+                alert("BibTeXをコピーしました");
+              }}
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-all active:scale-95"
+            >
               コピー
             </button>
           </div>
-          <pre className="rounded-lg bg-background p-4 text-xs text-muted-foreground overflow-x-auto font-mono">
-            {bibtexSample}
+          <pre className="rounded-lg bg-background p-4 text-xs text-muted-foreground overflow-x-auto font-mono whitespace-pre-wrap">
+            {papers.length === 0
+              ? "論文がありません"
+              : papers
+                  .map((p) => {
+                    const d = paperDetails.get(p.paper_id);
+                    if (!d) return "";
+                    const key = d.title
+                      .split(" ")[0]
+                      .toLowerCase()
+                      .replace(/[^a-z]/g, "");
+                    return `@article{${key}${d.year || ""},\n  title={${d.title}},\n  author={${d.authors?.join(" and ") || ""}},\n  year={${d.year || ""}}\n}`;
+                  })
+                  .filter(Boolean)
+                  .join("\n\n")}
           </pre>
         </div>
       )}

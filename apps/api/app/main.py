@@ -13,6 +13,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.papers.router import router as papers_router
 from app.modules.search.router import router as search_router
 from app.modules.memos.router import router as memos_router
+from app.modules.projects.router import router as projects_router
 
 # TODO: 各ドメインルーターのインポートを追加
 # from app.modules.memos.router import router as memos_router
@@ -48,8 +49,8 @@ app.include_router(auth_router, prefix="/api/v1", tags=["認証"])
 app.include_router(papers_router, prefix="/api/v1/library", tags=["ライブラリ"])
 app.include_router(search_router, prefix="/api/v1/search", tags=["検索"])
 app.include_router(memos_router, prefix="/api/v1/memos", tags=["メモ"])
+app.include_router(projects_router, prefix="/api/v1", tags=["プロジェクト"])
 # TODO: 各ドメインルーターをマウント
-# app.include_router(projects_router, prefix="/api/v1", tags=["プロジェクト"])
 # app.include_router(keywords_router, prefix="/api/v1", tags=["キーワード"])
 # app.include_router(related_router, prefix="/api/v1", tags=["関連"])
 # app.include_router(reading_router, prefix="/api/v1", tags=["読解サポート"])

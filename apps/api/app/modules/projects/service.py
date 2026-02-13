@@ -1,21 +1,105 @@
 """D-02: プロジェクト - サービス"""
 
+from fastapi import HTTPException, status
+from app.modules.projects.repository import ProjectRepository
+
 
 class ProjectService:
     """プロジェクトビジネスロジック"""
 
+    def __init__(self):
+        self.repository = ProjectRepository()
+
     async def create_project(self, owner_uid: str, data: dict) -> dict:
         """プロジェクト作成（seed papers対応）"""
-        # TODO(F-0201): Firestoreにプロジェクト作成
-        # TODO(F-0205): seedPaperIdsがある場合、参照論文も追加
-        pass
+        project = await self.repository.create({
+            "owner_uid": owner_uid,
+            "title": data["title"],
+            "description": data.get("description", ""),
+        })
 
-    async def add_paper(self, project_id: str, paper_id: str, owner_uid: str) -> dict:
+        # seedPaperIdsがある場合、参照論文も追加
+        seed_ids = data.get("seed_paper_ids", [])
+        for paper_id in seed_ids:
+            await self.repository.add_paper(project["id"], {"paper_id": paper_id})
+
+        if seed_ids:
+            project["paper_count"] = len(seed_ids)
+
+        return project
+
+    async def get_project(self, project_id: str, owner_uid: str) -> dict:
+        """プロジェクト詳細取得"""
+        project = await self.repository.get_by_id(project_id, owner_uid)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません。",
+            )
+        return project
+
+    async def list_projects(self, owner_uid: str) -> list[dict]:
+        """プロジェクト一覧"""
+        return await self.repository.list_by_owner(owner_uid)
+
+    async def update_project(self, project_id: str, owner_uid: str, data: dict) -> dict:
+        """プロジェクト更新"""
+        project = await self.repository.update(project_id, owner_uid, data)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません。",
+            )
+        return project
+
+    async def delete_project(self, project_id: str, owner_uid: str) -> None:
+        """プロジェクト削除"""
+        deleted = await self.repository.delete(project_id, owner_uid)
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません。",
+            )
+
+    async def add_paper(self, project_id: str, paper_id: str, owner_uid: str, note: str = "", role: str = "reference") -> dict:
         """参照論文追加"""
-        # TODO(F-0202): ライブラリに存在確認→紐付け
-        pass
+        # オーナー検証
+        project = await self.repository.get_by_id(project_id, owner_uid)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません。",
+            )
+        return await self.repository.add_paper(project_id, {
+            "paper_id": paper_id,
+            "note": note,
+            "role": role,
+        })
 
-    async def export_bibtex(self, project_id: str, owner_uid: str) -> str:
-        """BibTeX export"""
-        # TODO(F-0204): プロジェクト参照論文からBibTeX生成
-        pass
+    async def remove_paper(self, project_id: str, paper_id: str, owner_uid: str) -> None:
+        """参照論文削除"""
+        project = await self.repository.get_by_id(project_id, owner_uid)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません。",
+            )
+        removed = await self.repository.remove_paper(project_id, paper_id)
+        if not removed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="論文が見つかりません。",
+            )
+
+    async def get_project_papers(self, project_id: str, owner_uid: str) -> list[dict]:
+        """プロジェクトの参照論文一覧"""
+        project = await self.repository.get_by_id(project_id, owner_uid)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません。",
+            )
+        return await self.repository.get_project_papers(project_id)
+
+
+project_service = ProjectService()
