@@ -67,8 +67,10 @@ class PaperRepository:
 
     async def get_user_likes(self, uid: str) -> list[str]:
         """ユーザーのいいねした論文IDリストを取得"""
-        docs = await self._get_db().collection(self.COLLECTION_USERS).document(uid).collection(self.SUB_COLLECTION_LIKES).stream()
-        return [doc.id for doc in docs]
+        result = []
+        async for doc in self._get_db().collection(self.COLLECTION_USERS).document(uid).collection(self.SUB_COLLECTION_LIKES).stream():
+            result.append(doc.id)
+        return result
 
     async def get_papers_by_ids(self, paper_ids: list[str]) -> list[dict]:
         """複数のIDから論文を一括取得"""
@@ -79,10 +81,9 @@ class PaperRepository:
         # For simple implementations, loop or chunking. Let's start with loop for safety or batches
         # Efficient way: getAll
         refs = [self._get_db().collection(self.COLLECTION_PAPERS).document(pid) for pid in paper_ids]
-        docs = await self._get_db().get_all(refs)
         
         results = []
-        for doc in docs:
+        async for doc in self._get_db().get_all(refs):
             if doc.exists:
                 results.append(self._to_snake(doc.to_dict(), doc.id))
         return results

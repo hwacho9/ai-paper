@@ -1,40 +1,40 @@
 """
 D-02: プロジェクト（My Paper プロジェクト）- ルーター
-
-TODO(F-0201): プロジェクトCRUD | AC: 作成/読取/更新/削除が動作 | owner:@
-TODO(F-0202): 参照論文追加/削除 | AC: プロジェクトと論文の紐付け/解除 | owner:@
-TODO(F-0205): Seed Papers生成 | AC: seedPaperIds[]で初期参照論文付き作成 | owner:@
-TODO(F-0204): BibTeX export | AC: プロジェクト参照論文からBibTeX生成 | owner:@
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.firebase_auth import get_current_user
 from app.modules.projects.schemas import (
     ProjectCreate,
+    ProjectUpdate,
     ProjectPaperAdd,
     ProjectResponse,
+    ProjectListResponse,
+    ProjectPaperResponse,
 )
+from app.modules.projects.service import project_service
 
 router = APIRouter()
 
 
-@router.post("/projects", response_model=ProjectResponse)
+@router.post("/projects", response_model=ProjectResponse, status_code=201)
 async def create_project(
     body: ProjectCreate,
     current_user: dict = Depends(get_current_user),
 ):
     """プロジェクト作成（seedPaperIds対応）"""
-    # TODO(F-0201): Firestoreにプロジェクト作成
-    # TODO(F-0205): seedPaperIdsがある場合、参照論文も追加
-    pass
+    project = await project_service.create_project(
+        current_user["uid"], body.model_dump()
+    )
+    return project
 
 
-@router.get("/projects")
+@router.get("/projects", response_model=ProjectListResponse)
 async def list_projects(current_user: dict = Depends(get_current_user)):
     """プロジェクト一覧"""
-    # TODO(F-0201): ownerUidでフィルターして一覧返却
-    return []
+    projects = await project_service.list_projects(current_user["uid"])
+    return ProjectListResponse(projects=projects, total=len(projects))
 
 
 @router.get("/projects/{project_id}", response_model=ProjectResponse)
@@ -43,57 +43,57 @@ async def get_project(
     current_user: dict = Depends(get_current_user),
 ):
     """プロジェクト詳細"""
-    # TODO(F-0201): Firestoreからプロジェクト取得
-    pass
+    return await project_service.get_project(project_id, current_user["uid"])
 
 
 @router.patch("/projects/{project_id}", response_model=ProjectResponse)
 async def update_project(
     project_id: str,
+    body: ProjectUpdate,
     current_user: dict = Depends(get_current_user),
 ):
     """プロジェクト更新"""
-    # TODO(F-0201): Firestoreのプロジェクト更新
-    pass
+    return await project_service.update_project(
+        project_id, current_user["uid"], body.model_dump(exclude_unset=True)
+    )
 
 
-@router.delete("/projects/{project_id}")
+@router.delete("/projects/{project_id}", status_code=204)
 async def delete_project(
     project_id: str,
     current_user: dict = Depends(get_current_user),
 ):
     """プロジェクト削除"""
-    # TODO(F-0201): Firestoreのプロジェクト削除
-    pass
+    await project_service.delete_project(project_id, current_user["uid"])
 
 
-@router.post("/projects/{project_id}/papers")
+@router.post("/projects/{project_id}/papers", response_model=ProjectPaperResponse, status_code=201)
 async def add_paper_to_project(
     project_id: str,
     body: ProjectPaperAdd,
     current_user: dict = Depends(get_current_user),
 ):
     """プロジェクトに参照論文追加"""
-    # TODO(F-0202): Firestoreにプロジェクト-論文紐付け追加
-    pass
+    return await project_service.add_paper(
+        project_id, body.paper_id, current_user["uid"],
+        note=body.note or "", role=body.role,
+    )
 
 
-@router.delete("/projects/{project_id}/papers/{paper_id}")
+@router.delete("/projects/{project_id}/papers/{paper_id}", status_code=204)
 async def remove_paper_from_project(
     project_id: str,
     paper_id: str,
     current_user: dict = Depends(get_current_user),
 ):
     """プロジェクトから参照論文削除"""
-    # TODO(F-0202): Firestoreのプロジェクト-論文紐付け削除
-    pass
+    await project_service.remove_paper(project_id, paper_id, current_user["uid"])
 
 
-@router.get("/projects/{project_id}/export/bibtex")
-async def export_bibtex(
+@router.get("/projects/{project_id}/papers", response_model=list[ProjectPaperResponse])
+async def list_project_papers(
     project_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """BibTeX export"""
-    # TODO(F-0204): プロジェクト参照論文からBibTeX生成
-    return {"bibtex": "", "entry_count": 0}
+    """プロジェクトの参照論文一覧"""
+    return await project_service.get_project_papers(project_id, current_user["uid"])

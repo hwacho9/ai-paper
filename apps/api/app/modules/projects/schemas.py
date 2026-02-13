@@ -14,6 +14,12 @@ class ProjectCreate(BaseModel):
     seed_paper_ids: list[str] = []
 
 
+class ProjectUpdate(BaseModel):
+    """プロジェクト更新リクエスト"""
+    title: str | None = None
+    description: str | None = None
+
+
 class ProjectResponse(BaseModel):
     """プロジェクトレスポンス"""
     id: str
@@ -26,8 +32,22 @@ class ProjectResponse(BaseModel):
     status: str = "active"
 
 
+class ProjectListResponse(BaseModel):
+    """プロジェクト一覧レスポンス"""
+    projects: list[ProjectResponse]
+    total: int
+
+
 class ProjectPaperAdd(BaseModel):
     """プロジェクトへの論文追加"""
     paper_id: str
     note: str | None = None
     role: str = "reference"
+
+
+class ProjectPaperResponse(BaseModel):
+    """プロジェクト論文レスポンス"""
+    paper_id: str
+    note: str = ""
+    role: str = "reference"
+    added_at: datetime | None = None
