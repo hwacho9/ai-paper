@@ -5,7 +5,7 @@ Docs: https://api.semanticscholar.org/api-docs/graph
 """
 
 import httpx
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 class SemanticScholarClient:
     BASE_URL = "https://api.semanticscholar.org/graph/v1"
@@ -16,7 +16,7 @@ class SemanticScholarClient:
         if self.api_key:
             self.headers["x-api-key"] = self.api_key
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
+    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5))
     async def search_papers(
         self, 
         query: str, 

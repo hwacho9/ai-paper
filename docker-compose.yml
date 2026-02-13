@@ -35,7 +35,7 @@ services:
     volumes:
       - ./apps/api/app:/app/app
       - ./apps/api/worker:/app/worker
-      - ~/.config/gcloud:/root/.config/gcloud:ro
+      - ${APPDATA}/gcloud:/root/.config/gcloud:ro
     env_file:
       - ./apps/api/.env
     environment:
