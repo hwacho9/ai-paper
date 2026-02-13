@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
-import { apiGet, apiDelete } from "@/lib/api/client";
+import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 
 type Tab = "papers" | "memos" | "export";
 
@@ -39,6 +39,22 @@ interface PaperDetail {
   abstract: string;
 }
 
+interface LibraryPaper {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string;
+  abstract: string;
+  status: string;
+  is_liked: boolean;
+}
+
+interface LibraryResponse {
+  papers: LibraryPaper[];
+  total: number;
+}
+
 export default function ProjectDetailPage({
   params,
 }: {
@@ -53,6 +69,13 @@ export default function ProjectDetailPage({
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 論文追加ダイアログ
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [libraryPapers, setLibraryPapers] = useState<LibraryPaper[]>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [addingPaperId, setAddingPaperId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchProject = useCallback(async () => {
     try {
@@ -73,7 +96,6 @@ export default function ProjectDetailPage({
           );
           details.set(paper.paper_id, detail);
         } catch {
-          // 論文詳細が取得できなくても続行
           details.set(paper.paper_id, {
             id: paper.paper_id,
             title: paper.paper_id,
@@ -108,6 +130,68 @@ export default function ProjectDetailPage({
       alert(message);
     }
   };
+
+  const openAddDialog = async () => {
+    setShowAddDialog(true);
+    setSearchQuery("");
+    setLibraryLoading(true);
+    try {
+      const data = await apiGet<LibraryResponse>("/api/v1/library");
+      setLibraryPapers(data.papers);
+    } catch {
+      setLibraryPapers([]);
+    } finally {
+      setLibraryLoading(false);
+    }
+  };
+
+  const handleAddPaper = async (paper: LibraryPaper) => {
+    setAddingPaperId(paper.id);
+    try {
+      await apiPost(`/api/v1/projects/${id}/papers`, {
+        paper_id: paper.id,
+      });
+      // ローカルstateに即追加
+      setPapers((prev) => [
+        ...prev,
+        {
+          paper_id: paper.id,
+          note: "",
+          role: "reference",
+          added_at: new Date().toISOString(),
+        },
+      ]);
+      setPaperDetails((prev) => {
+        const next = new Map(prev);
+        next.set(paper.id, {
+          id: paper.id,
+          title: paper.title,
+          authors: paper.authors,
+          year: paper.year,
+          venue: paper.venue,
+          abstract: paper.abstract,
+        });
+        return next;
+      });
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "追加に失敗しました";
+      alert(message);
+    } finally {
+      setAddingPaperId(null);
+    }
+  };
+
+  // ダイアログ内のフィルタリング（既に追加済みを除外 + 検索クエリ）
+  const existingPaperIds = new Set(papers.map((p) => p.paper_id));
+  const filteredLibraryPapers = libraryPapers.filter((p) => {
+    if (existingPaperIds.has(p.id)) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      p.title.toLowerCase().includes(q) ||
+      p.authors.some((a) => a.toLowerCase().includes(q))
+    );
+  });
 
   if (loading) {
     return (
@@ -171,26 +255,9 @@ export default function ProjectDetailPage({
               {project.description}
             </p>
           </div>
-          <button className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground hover:bg-muted/80 transition-colors">
-            <svg
-              className="h-4 w-4 inline mr-1"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
-              />
-            </svg>
-            設定
-          </button>
         </div>
         <div className="mt-4 flex gap-4 text-sm text-muted-foreground">
           <span>{papers.length} 論文</span>
-          <span>ID: {id}</span>
         </div>
       </div>
 
@@ -276,7 +343,10 @@ export default function ProjectDetailPage({
               </div>
             );
           })}
-          <button className="w-full rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
+          <button
+            onClick={openAddDialog}
+            className="w-full rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
+          >
             + 論文を追加
           </button>
         </div>
@@ -297,7 +367,6 @@ export default function ProjectDetailPage({
             <h4 className="font-semibold">BibTeX</h4>
             <button
               onClick={() => {
-                // 簡易BibTeX生成
                 const bibtex = papers
                   .map((p) => {
                     const d = paperDetails.get(p.paper_id);
@@ -334,6 +403,143 @@ export default function ProjectDetailPage({
                   .filter(Boolean)
                   .join("\n\n")}
           </pre>
+        </div>
+      )}
+
+      {/* 論文追加ダイアログ */}
+      {showAddDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="glass-card w-full max-w-lg rounded-2xl p-6 mx-4 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">論文を追加</h3>
+              <button
+                onClick={() => setShowAddDialog(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            {/* 検索フィールド */}
+            <div className="relative mb-4">
+              <svg
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={1.5}
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+                />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="マイライブラリから検索..."
+                className="w-full rounded-lg border border-border bg-background pl-10 pr-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+
+            {/* 論文リスト */}
+            <div className="flex-1 overflow-y-auto space-y-2 min-h-0">
+              {libraryLoading && (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="rounded-xl bg-muted/20 p-4 animate-pulse"
+                    >
+                      <div className="h-4 w-3/4 bg-muted/50 rounded mb-2" />
+                      <div className="h-3 w-1/2 bg-muted/30 rounded" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!libraryLoading && filteredLibraryPapers.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <div className="text-3xl mb-2">📚</div>
+                  <p className="text-sm">
+                    {libraryPapers.length === 0
+                      ? "マイライブラリに論文がありません"
+                      : searchQuery
+                        ? "該当する論文が見つかりません"
+                        : "すべての論文が追加済みです"}
+                  </p>
+                </div>
+              )}
+
+              {!libraryLoading &&
+                filteredLibraryPapers.map((paper) => (
+                  <div
+                    key={paper.id}
+                    className="group flex items-center gap-3 rounded-xl border border-border bg-muted/10 p-3 transition-all hover:border-primary/30 hover:bg-muted/20"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-xs font-bold">
+                      {paper.year?.toString().slice(-2) || "??"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-sm font-medium truncate">
+                        {paper.title}
+                      </h4>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {paper.authors.join(", ")}{" "}
+                        {paper.venue && `· ${paper.venue}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleAddPaper(paper)}
+                      disabled={addingPaperId === paper.id}
+                      className="shrink-0 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary
+                        hover:bg-primary hover:text-primary-foreground
+                        transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {addingPaperId === paper.id ? "追加中..." : "追加"}
+                    </button>
+                  </div>
+                ))}
+            </div>
+
+            {/* フッター: 論文検索へ */}
+            <div className="mt-4 pt-4 border-t border-border">
+              <Link
+                href="/search"
+                onClick={() => setShowAddDialog(false)}
+                className="flex items-center justify-center gap-2 w-full rounded-xl border border-border bg-muted/20 p-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={1.5}
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"
+                  />
+                </svg>
+                論文を検索して追加する →
+              </Link>
+            </div>
+          </div>
         </div>
       )}
     </div>
