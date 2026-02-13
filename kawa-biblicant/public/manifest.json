@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Research Mapper",
+  "version": "0.1.0",
+  "description": "研究テーマから重要論文を俯瞰するポップアップ。",
+  "action": {
+    "default_title": "Research Mapper"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": ["tabs"],
+  "host_permissions": ["<all_urls>"]
+}

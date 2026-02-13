@@ -1,0 +1,22 @@
+# Cloud Run APIサービス 配備スペック
+# gcloud run deploy で使用
+
+# サービス名
+# api-service
+
+# イメージ
+# gcr.io/${GCP_PROJECT_ID}/api-service:latest
+
+# 配備パラメータ
+# --platform managed
+# --region asia-northeast1
+# --port 8080
+# --cpu 1
+# --memory 512Mi
+# --concurrency 50
+# --min-instances 0
+# --max-instances 10
+# --timeout 60s
+# --service-account api-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com
+# --set-env-vars GCP_PROJECT_ID=${GCP_PROJECT_ID},GCP_REGION=${GCP_REGION},...
+# --allow-unauthenticated (ヘルスチェック用、実際のAPIはJWT検証)

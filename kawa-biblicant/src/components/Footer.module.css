@@ -1,0 +1,39 @@
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.footnote {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.legend {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.dotMuted {
+  background: var(--accent-2);
+}

@@ -1,0 +1,15 @@
+# Next.js ローカル開発用Dockerfile
+FROM node:20-alpine
+
+WORKDIR /app
+
+# 依存パッケージインストール（キャッシュ活用）
+COPY package.json package-lock.json* ./
+RUN npm install
+
+# ソースコードコピー
+COPY . .
+
+# Next.js開発サーバー
+EXPOSE 3000
+CMD ["npm", "run", "dev"]

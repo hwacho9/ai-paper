@@ -1,0 +1,15 @@
+# パイプラインWorker用Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 依存パッケージのインストール
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Worker + 共通コードのコピー
+COPY app/core/ ./app/core/
+COPY worker/ ./worker/
+
+# Cloud Run Jobsのエントリーポイント
+CMD ["python", "-m", "worker.main"]

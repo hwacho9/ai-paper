@@ -1,0 +1,21 @@
+# Cloud Run Jobs Worker 配備スペック
+
+# ジョブ名
+# ingest-worker
+
+# イメージ
+# gcr.io/${GCP_PROJECT_ID}/ingest-worker:latest
+
+# 配備パラメータ
+# --region asia-northeast1
+# --cpu 2
+# --memory 2Gi
+# --task-timeout 1800s (30分)
+# --max-retries 3
+# --parallelism 1
+# --service-account worker-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com
+
+# 実行（APIから呼び出し）
+# gcloud run jobs execute ingest-worker \
+#   --region asia-northeast1 \
+#   --update-env-vars PAPER_ID=${PAPER_ID},OWNER_UID=${OWNER_UID},REQUEST_ID=${REQUEST_ID}

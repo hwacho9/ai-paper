@@ -1,0 +1,20 @@
+# Pub/Sub トピック・サブスクリプション定義
+
+# トピック
+# paper.ingest.requested - PDF取り込み開始依頼
+# paper.ingest.completed - 取り込み完了通知
+# paper.ingest.failed    - 取り込み失敗通知
+
+# 作成コマンド
+# gcloud pubsub topics create paper.ingest.requested
+# gcloud pubsub topics create paper.ingest.completed
+# gcloud pubsub topics create paper.ingest.failed
+
+# メッセージスキーマ
+# {
+#   "paperId": "string",
+#   "ownerUid": "string",
+#   "pdfUrl": "gs://bucket/path/to/pdf",
+#   "requestId": "string",
+#   "timestamp": "ISO8601"
+# }

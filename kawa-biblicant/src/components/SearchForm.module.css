@@ -1,0 +1,75 @@
+.search {
+  display: grid;
+  gap: 12px;
+}
+
+.label {
+  font-weight: 600;
+}
+
+.inputRow {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.inputField {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  font-size: 16px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 120px;
+}
+
+.buttonBase {
+  border: none;
+  border-radius: 14px;
+  padding: 14px 22px;
+  font-weight: 600;
+  font-family: "Space Grotesk", sans-serif;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.submitButton {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 12px 25px rgba(239, 106, 92, 0.35);
+}
+
+.submitButton:hover {
+  transform: translateY(-2px);
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  background: rgba(58, 123, 213, 0.1);
+  color: var(--accent-2);
+  box-shadow: none;
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .inputRow {
+    grid-template-columns: 1fr;
+  }
+
+  .submitButton {
+    width: 100%;
+  }
+}
