@@ -20,4 +20,4 @@ async def search_papers(
     """
     外部論文DBを検索する。
     """
-    return await search_service.search_papers(query=q, limit=limit, offset=offset, source=source)
+    return await search_service.search_papers(query=q, limit=limit, offset=offset, source=source, uid=current_user["uid"])

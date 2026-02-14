@@ -79,11 +79,35 @@ class SearchResultListResponse(BaseModel):
 - `SearchResultCard` — 各結果のカード（いいねボタン付き）
 - `SearchFilters` — 詳細フィルター（年度/著者/ソース）
 
+## 検索履歴サジェスト機能（F-0401拡張）
+
+**概要:**
+
+- ユーザーの検索履歴を `localStorage` に保存（キー: `paper-search-history`）
+- 最大10件の検索履歴を保持（FIFO削除）
+- 検索フォーカス時にフィルター済みのサジェスト候補を表示（ドロップダウン）
+
+**フロントエンド実装:**
+
+- `/search` ページ内で検索入力フォーカス時にサジェスト表示
+- 候補をクリックすると該当クエリで検索実行
+- クリックアウト時にドロップダウン自動非表示
+
+**データ保存フォーマット:**
+
+```json
+[
+  { "query": "transformer", "timestamp": 1707873600000 },
+  { "query": "reinforcement learning", "timestamp": 1707873500000 }
+]
+```
+
 ## 実装ノート
 
 - **キャッシュ**: 同一クエリは短期TTLキャッシュ（メモリ/Redis代替は後順位）
 - **速度**: 検索UXのためAPI応答は300〜800ms目標
 - **外部API**: 1次は Semantic Scholar API を使用（レート制限に注意）
+- **検索履歴**: ローカル保存（ログイン不要、ブラウザのストレージ依存）
 
 ## TODO一覧
 

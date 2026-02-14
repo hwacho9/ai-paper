@@ -25,6 +25,7 @@ export interface KeywordListResponse {
 export interface PaperKeywordTagCreate {
   keyword_id: string;
   confidence?: number | null;
+  reason?: "llm_paper_keyword" | "llm_prerequisite_keyword" | string;
 }
 
 export interface PaperKeywordResponse {
@@ -34,6 +35,7 @@ export interface PaperKeywordResponse {
   description: string;
   confidence: number;
   source: string;
+  reason: string;
 }
 
 export interface PaperKeywordListResponse {
@@ -49,7 +51,9 @@ export function listKeywords(): Promise<KeywordListResponse> {
   return apiGet<KeywordListResponse>("/api/v1/keywords");
 }
 
-export function listPaperKeywords(paperId: string): Promise<PaperKeywordListResponse> {
+export function listPaperKeywords(
+  paperId: string,
+): Promise<PaperKeywordListResponse> {
   return apiGet<PaperKeywordListResponse>(`/api/v1/papers/${paperId}/keywords`);
 }
 
@@ -57,7 +61,10 @@ export function tagPaperKeyword(
   paperId: string,
   data: PaperKeywordTagCreate,
 ): Promise<PaperKeywordResponse> {
-  return apiPost<PaperKeywordResponse>(`/api/v1/papers/${paperId}/keywords`, data);
+  return apiPost<PaperKeywordResponse>(
+    `/api/v1/papers/${paperId}/keywords`,
+    data,
+  );
 }
 
 export function untagPaperKeyword(

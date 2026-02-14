@@ -109,7 +109,7 @@ class PaperPdfUpload(BaseModel):
 ### ページ
 
 - `/library` — いいね保存論文リスト/フィルター
-- `/papers/[id]` — 論文詳細（メタ + いいね + Related プレビュー）
+- `/papers/[id]` — 論文詳細（メタ + キーワード + メモ + 関連論文）
 
 ### コンポーネント
 
@@ -119,6 +119,10 @@ class PaperPdfUpload(BaseModel):
 - `LibraryList` — ライブラリリスト
 - `LibraryFilters` — フィルター/ソートUI
 - `StatusBadge` — 論文状態バッジ（PENDING/INGESTING/READY/FAILED）
+- `KeywordTagsEditor` — キーワード編集コンポーネント（D-06との連携）
+  - 📄 論文キーワード セクション（sky色）
+  - 📚 事前知識キーワード セクション（amber色）
+  - 各セクションに追加ボタン + 削除モード実装
 
 ## TODO一覧
 

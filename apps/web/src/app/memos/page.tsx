@@ -74,7 +74,6 @@ export default function MemosPage() {
   // エディタ
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
-  const [editTags, setEditTags] = useState("");
   const [saving, setSaving] = useState(false);
 
   const fetchMemos = useCallback(async () => {
@@ -119,13 +118,11 @@ export default function MemosPage() {
       setView({ mode: "editor", paper, existingMemo: existing });
       setEditTitle(existing.title);
       setEditBody(existing.body);
-      setEditTags(existing.tags.join(", "));
     } else {
       // 新規作成
       setView({ mode: "editor", paper, existingMemo: null });
       setEditTitle(`Note: ${paper.title}`);
       setEditBody(`## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n`);
-      setEditTags("");
     }
   };
 
@@ -146,7 +143,6 @@ export default function MemosPage() {
     setView({ mode: "editor", paper, existingMemo: memo });
     setEditTitle(memo.title);
     setEditBody(memo.body);
-    setEditTags(memo.tags.join(", "));
   };
 
   /* ---- 一覧へ戻る ---- */
@@ -159,10 +155,7 @@ export default function MemosPage() {
     if (!editTitle.trim() && !editBody.trim()) return;
     setSaving(true);
     try {
-      const tags = editTags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
+      const tags: string[] = [];
 
       if (view.mode === "editor" && view.existingMemo) {
         // 更新
@@ -210,9 +203,7 @@ export default function MemosPage() {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
-      m.title.toLowerCase().includes(q) ||
-      m.body.toLowerCase().includes(q) ||
-      m.tags.some((t) => t.toLowerCase().includes(q))
+      m.title.toLowerCase().includes(q) || m.body.toLowerCase().includes(q)
     );
   });
 
@@ -474,20 +465,6 @@ export default function MemosPage() {
             className="w-full bg-transparent text-sm outline-none resize-none leading-relaxed placeholder:text-muted-foreground/40 font-mono"
           />
 
-          {/* タグ */}
-          <div>
-            <label className="text-xs text-muted-foreground">
-              タグ（カンマ区切り）
-            </label>
-            <input
-              type="text"
-              value={editTags}
-              onChange={(e) => setEditTags(e.target.value)}
-              placeholder="transformer, survey, NLP"
-              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
           {/* アクション */}
           <div className="flex items-center justify-between pt-2 border-t border-border">
             <div>
@@ -640,49 +617,59 @@ export default function MemosPage() {
           {filtered.map((memo) => {
             const paperRef = memo.refs.find((r) => r.ref_type === "paper");
             return (
-              <button
-                key={memo.id}
-                onClick={() => openExistingMemo(memo)}
-                className="glass-card group text-left rounded-xl p-4 transition-all duration-200
-                  hover:scale-[1.03] hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5
-                  focus:outline-none focus:ring-2 focus:ring-primary/30"
-              >
-                <h4 className="text-sm font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-                  {memo.title || "無題のメモ"}
-                </h4>
-                <p className="mt-1.5 text-xs text-muted-foreground line-clamp-3 leading-relaxed">
-                  {memo.body || "(本文なし)"}
-                </p>
-                {memo.tags.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {memo.tags.slice(0, 2).map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary"
-                      >
-                        {tag}
+              <div key={memo.id} className="relative group">
+                <button
+                  onClick={() => openExistingMemo(memo)}
+                  className="glass-card w-full text-left rounded-xl p-4 transition-all duration-200
+                    hover:scale-[1.03] hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5
+                    focus:outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <h4 className="text-sm font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors pr-6">
+                    {memo.title || "無題のメモ"}
+                  </h4>
+                  <p className="mt-1.5 text-xs text-muted-foreground line-clamp-3 leading-relaxed">
+                    {memo.body || "(本文なし)"}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between">
+                    {paperRef ? (
+                      <span className="text-[9px] text-primary/60">
+                        📄 論文メモ
                       </span>
-                    ))}
-                    {memo.tags.length > 2 && (
-                      <span className="text-[9px] text-muted-foreground">
-                        +{memo.tags.length - 2}
-                      </span>
+                    ) : (
+                      <span />
                     )}
-                  </div>
-                )}
-                <div className="mt-2 flex items-center justify-between">
-                  {paperRef ? (
-                    <span className="text-[9px] text-primary/60">
-                      📄 論文メモ
+                    <span className="text-[9px] text-muted-foreground">
+                      {formatRelativeTime(memo.updated_at)}
                     </span>
-                  ) : (
-                    <span />
-                  )}
-                  <span className="text-[9px] text-muted-foreground">
-                    {formatRelativeTime(memo.updated_at)}
-                  </span>
-                </div>
-              </button>
+                  </div>
+                </button>
+                {/* 削除ボタン */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(memo.id);
+                  }}
+                  className="absolute top-2 right-2 rounded-lg p-1.5 text-muted-foreground/50
+                    opacity-0 group-hover:opacity-100
+                    hover:bg-red-500/20 hover:text-red-400
+                    transition-all z-10"
+                  title="メモを削除"
+                >
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                    />
+                  </svg>
+                </button>
+              </div>
             );
           })}
         </div>

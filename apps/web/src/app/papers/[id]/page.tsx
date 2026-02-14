@@ -5,7 +5,7 @@
  * データ取得・状態管理を担当し、表示はコンポーネントへ分離
  */
 
-import { use, useState, useEffect, useCallback } from "react";
+import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { apiGet } from "@/lib/api/client";
 import {
@@ -47,11 +47,16 @@ export default function PaperDetailPage({
   const [memosLoading, setMemosLoading] = useState(false);
   const [memoTitle, setMemoTitle] = useState("");
   const [memoBody, setMemoBody] = useState("");
-  const [memoTags, setMemoTags] = useState("");
   const [memoSaving, setMemoSaving] = useState(false);
+  const [memoEditing, setMemoEditing] = useState(false);
 
-  const [paperKeywords, setPaperKeywords] = useState<PaperKeywordResponse[]>([]);
-  const [keywordsLoading, setKeywordsLoading] = useState(false);
+  const [paperKeywords, setPaperKeywords] = useState<PaperKeywordResponse[]>(
+    [],
+  );
+  const [keywordsLoading, setKeywordsLoading] = useState(true);
+  const [keywordsInitialFetched, setKeywordsInitialFetched] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingCountRef = useRef(0);
   const [keywordsError, setKeywordsError] = useState<string | null>(null);
 
   const fetchPaper = useCallback(async () => {
@@ -78,12 +83,9 @@ export default function PaperDetailPage({
         setPaperMemo(related);
         setMemoTitle(related.title);
         setMemoBody(related.body);
-        setMemoTags(related.tags.join(", "));
       } else {
         setPaperMemo(null);
-        setMemoTitle("");
-        setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
-        setMemoTags("");
+        setMemoEditing(false);
       }
     } catch {
       setPaperMemo(null);
@@ -98,20 +100,68 @@ export default function PaperDetailPage({
       setKeywordsError(null);
       const data = await listPaperKeywords(id);
       setPaperKeywords(data.keywords);
+      // キーワードが見つかった場合のみloadingをfalseに
+      if (data.keywords.length > 0) {
+        setKeywordsLoading(false);
+      }
+      return data.keywords.length;
     } catch (e: unknown) {
       setKeywordsError(
         e instanceof Error ? e.message : "キーワードの取得に失敗しました",
       );
-    } finally {
       setKeywordsLoading(false);
+      return -1; // error
     }
   }, [id]);
 
   useEffect(() => {
     fetchPaper();
     fetchMemo();
-    fetchPaperKeywords();
+    fetchPaperKeywords().then((count) => {
+      setKeywordsInitialFetched(true);
+      if (count === 0) {
+        // キーワードが未生成 → ポーリング開始
+        setKeywordsLoading(true);
+      } else {
+        setKeywordsLoading(false);
+      }
+    });
   }, [fetchPaper, fetchMemo, fetchPaperKeywords]);
+
+  // キーワードが0件の場合、ポーリングで生成完了を待つ
+  useEffect(() => {
+    if (!keywordsInitialFetched) return;
+    if (paperKeywords.length > 0) {
+      // 既にキーワードがある → ポーリング不要
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      setKeywordsLoading(false);
+      return;
+    }
+
+    // 0件のときポーリング開始（3秒間隔、最大10回=30秒）
+    pollingCountRef.current = 0;
+    pollingRef.current = setInterval(async () => {
+      pollingCountRef.current++;
+      const count = await fetchPaperKeywords();
+      if ((count && count > 0) || pollingCountRef.current >= 10) {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        setKeywordsLoading(false);
+      }
+    }, 3000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [keywordsInitialFetched, paperKeywords.length, fetchPaperKeywords]);
 
   useEffect(() => {
     if (paper && !paperMemo && !memoTitle) {
@@ -123,28 +173,22 @@ export default function PaperDetailPage({
     if (!memoTitle.trim() && !memoBody.trim()) return;
     setMemoSaving(true);
     try {
-      const tags = memoTags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-
       if (paperMemo) {
         await updateMemo(paperMemo.id, {
           title: memoTitle.trim(),
           body: memoBody.trim(),
-          tags,
         });
       } else {
         const refs: MemoRef[] = [{ ref_type: "paper", ref_id: id, note: null }];
         await createMemo({
           title: memoTitle.trim(),
           body: memoBody.trim(),
-          tags,
           refs,
         });
       }
 
       await fetchMemo();
+      setMemoEditing(false);
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
@@ -159,9 +203,9 @@ export default function PaperDetailPage({
     try {
       await deleteMemo(paperMemo.id);
       setPaperMemo(null);
-      if (paper) setMemoTitle(`Note: ${paper.title}`);
-      setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
-      setMemoTags("");
+      setMemoEditing(false);
+      setMemoTitle("");
+      setMemoBody("");
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "削除に失敗しました");
     }
@@ -176,7 +220,7 @@ export default function PaperDetailPage({
     return created.id;
   };
 
-  const handleAddKeyword = async (label: string) => {
+  const handleAddKeyword = async (label: string, reason?: string) => {
     const normalized = label.trim();
     if (!normalized) return;
 
@@ -187,7 +231,10 @@ export default function PaperDetailPage({
 
     try {
       const keywordId = await resolveKeywordIdByLabel(normalized);
-      await tagPaperKeyword(id, { keyword_id: keywordId });
+      await tagPaperKeyword(id, {
+        keyword_id: keywordId,
+        reason: reason || "llm_paper_keyword",
+      });
       await fetchPaperKeywords();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "キーワード追加に失敗しました");
@@ -249,9 +296,7 @@ export default function PaperDetailPage({
 
       <PaperTabs activeTab={activeTab} onChange={setActiveTab} />
 
-      {activeTab === "overview" && (
-        <OverviewPanel abstract={paper.abstract} />
-      )}
+      {activeTab === "overview" && <OverviewPanel abstract={paper.abstract} />}
 
       {activeTab === "pdf" && (
         <PdfPanel title={paper.title} pdfUrl={paper.pdf_url} />
@@ -261,21 +306,25 @@ export default function PaperDetailPage({
         <MemoEditor
           memo={paperMemo}
           loading={memosLoading}
+          editing={memoEditing}
           title={memoTitle}
           body={memoBody}
-          tags={memoTags}
           saving={memoSaving}
+          keywords={paperKeywords}
+          keywordsLoading={keywordsLoading}
           onChangeTitle={setMemoTitle}
           onChangeBody={setMemoBody}
-          onChangeTags={setMemoTags}
           onSave={handleSaveMemo}
           onDelete={handleDeleteMemo}
+          onCreate={() => {
+            setMemoTitle(`Note: ${paper.title}`);
+            setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
+            setMemoEditing(true);
+          }}
         />
       )}
 
-      {activeTab === "related" && (
-        <RelatedPanel />
-      )}
+      {activeTab === "related" && <RelatedPanel />}
     </div>
   );
 }

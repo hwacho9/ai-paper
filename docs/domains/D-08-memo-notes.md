@@ -32,8 +32,7 @@ memos/{memoId}
   "body": "string",
   "status": "draft" | "reviewed",
   "createdAt": "timestamp",
-  "updatedAt": "timestamp",
-  "tags": ["string"]
+  "updatedAt": "timestamp"
 }
 ```
 
@@ -65,7 +64,6 @@ memos/{memoId}/refs/{refId}
 class MemoCreate(BaseModel):
     title: str = ""
     body: str = ""
-    tags: list[str] = []
     refs: list[MemoRefCreate] = []
 
 class MemoRefCreate(BaseModel):
@@ -81,7 +79,6 @@ class MemoResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
-    tags: list[str]
     refs: list[MemoRefResponse]
 ```
 
@@ -90,12 +87,16 @@ class MemoResponse(BaseModel):
 ### ページ
 
 - `/memos` — メモ一覧（チェック/編集/整理）
+- `/papers/[id]` — 論文詳細内の関連メモ表示（D-03との連携）
 
 ### コンポーネント
 
-- `MemoCard` — メモカード（一覧用、チェックボックス付き）
-- `MemoEditor` — メモ編集器（リッチテキスト）
+- `MemoCard` — メモカード（一覧用、チェックボックス付き、タグ表示廃止）
+- `MemoEditor` — メモ編集器（リッチテキスト、関連キーワードを参照用に表示）
+  - 論文のタグ付きキーワード（📄 論文キーワード、📚 事前知識キーワード）を表示
+  - 参照連結機能（D-06キーワードとの連携）
 - `MemoRefBadge` — 参照先バッジ（論文/チャンク/キーワード）
+- `MemoEditorForm` — メモ編集フォーム（キーワード情報をコンテキストとして表示）
 
 ## 自動メモ生成フロー
 

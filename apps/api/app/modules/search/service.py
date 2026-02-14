@@ -21,7 +21,7 @@ class SearchService:
         self.scholar = ScholarClient()
         self.gemini = gemini_client
 
-    async def search_papers(self, query: str, limit: int = 20, offset: int = 0, source: str = "arxiv") -> SearchResultListResponse:
+    async def search_papers(self, query: str, limit: int = 20, offset: int = 0, source: str = "arxiv", uid: str | None = None) -> SearchResultListResponse:
         """
         論文を検索する。source引数で検索対象を指定可能。
         valid sources: "arxiv", "pubmed", "scholar", "gemini"
@@ -58,10 +58,20 @@ class SearchService:
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Search API Error ({source}): {str(e)}")
 
+        # ユーザーのライブラリ（いいね済みID一覧）を取得
+        liked_ids: set[str] = set()
+        if uid:
+            try:
+                from app.modules.papers.repository import PaperRepository
+                paper_repo = PaperRepository()
+                liked_ids = set(await paper_repo.get_user_likes(uid))
+            except Exception:
+                pass  # ライブラリ取得に失敗しても検索結果は返す
+
         # Convert to Response Schema
         items = []
         for r in results:
-            items.append(self._convert_to_item(r))
+            items.append(self._convert_to_item(r, liked_ids))
 
         return SearchResultListResponse(
             results=items,
@@ -70,7 +80,7 @@ class SearchService:
             limit=limit
         )
 
-    def _convert_to_item(self, result: SearchResult) -> SearchResultItem:
+    def _convert_to_item(self, result: SearchResult, liked_ids: set[str] | None = None) -> SearchResultItem:
         # ID handling
         paper_id = None
         
@@ -78,13 +88,13 @@ class SearchService:
         if result.external_ids.get("ArXiv"):
             paper_id = result.external_ids["ArXiv"]
         elif result.external_ids.get("DOI"):
-            # DOI can contain slashes, might need encoding if used in URL path directly.
-            # safe to use UUID for system ID and keep DOI as metadata?
-            # For now, let's generate UUID to be safe for URL paths if no simple ID.
             pass
             
         if not paper_id:
             paper_id = str(uuid.uuid4())
+
+        # ライブラリに含まれているか判定
+        is_in_library = paper_id in liked_ids if liked_ids else False
 
         return SearchResultItem(
             external_id=paper_id,
@@ -97,8 +107,8 @@ class SearchService:
             doi=result.external_ids.get("DOI"),
             arxiv_id=result.external_ids.get("ArXiv"),
             pdf_url=result.pdf_url,
-            citation_count=0, # Not available in most simple APIs
-            is_in_library=False 
+            citation_count=0,
+            is_in_library=is_in_library
         )
 
 search_service = SearchService()

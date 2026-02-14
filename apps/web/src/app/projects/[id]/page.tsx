@@ -301,9 +301,10 @@ export default function ProjectDetailPage({
           {papers.map((paper) => {
             const detail = paperDetails.get(paper.paper_id);
             return (
-              <div
+              <Link
                 key={paper.paper_id}
-                className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30"
+                href={`/papers/${paper.paper_id}`}
+                className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 cursor-pointer"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-sm font-bold">
                   {detail?.year?.toString().slice(-2) || "??"}
@@ -321,6 +322,7 @@ export default function ProjectDetailPage({
                 <button
                   onClick={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     handleRemovePaper(paper.paper_id);
                   }}
                   className="text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
@@ -340,7 +342,7 @@ export default function ProjectDetailPage({
                     />
                   </svg>
                 </button>
-              </div>
+              </Link>
             );
           })}
           <button

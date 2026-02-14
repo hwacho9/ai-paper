@@ -1,12 +1,9 @@
 """
 D-03: ペーパーライブラリ - サービス
 """
-import asyncio
 from app.modules.papers.repository import PaperRepository
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
 
-from app.modules.memos.service import memo_service 
-from app.core.gemini import gemini_client
 from fastapi import UploadFile
 
 class PaperService:
@@ -17,7 +14,6 @@ class PaperService:
         """
         いいねをトグル（ON/OFF）する。
         論文がDBになければ作成する。
-        いいねON時にメモを自動生成し、キーワードをLLMで生成する。
         
         Returns:
             bool: トグル後の状態 (True: Liked, False: Unliked)
@@ -26,7 +22,8 @@ class PaperService:
         
         # 1. 論文がDBにあるか確認、なければ作成
         paper = await self.repository.get_by_id(paper_id)
-        if not paper:
+        is_new_paper = paper is None
+        if is_new_paper:
             paper = await self.repository.create(paper_id, paper_data.model_dump())
 
         # 2. 現在のいいね状態を確認
@@ -40,16 +37,11 @@ class PaperService:
         else:
             # Like
             await self.repository.add_like(uid, paper_id)
-            # メモ自動生成トリガー
-            await memo_service.create_auto_memo(uid, paper_id, paper_data.title)
-            # キーワード自動推薦（モック）
-            from app.modules.keywords.service import keyword_service
-            await keyword_service.suggest_for_new_library_paper(paper_id, uid)
             
-            # キーワード自動生成（バックグラウンド）
-            asyncio.create_task(
-                self._generate_and_save_keywords(paper_id, paper_data.title, paper_data.abstract)
-            )
+            # 新規追加時のみキーワード推薦を実行
+            if is_new_paper:
+                from app.modules.keywords.service import keyword_service
+                await keyword_service.suggest_for_new_library_paper(paper_id, uid)
             
             # Ingestion Trigger (Auto-Ingest)
             # URLがある場合のみトリガー
@@ -60,26 +52,6 @@ class PaperService:
                 await execute_ingest_job(paper["id"], uid, request_id, pdf_url=paper.get("pdf_url"))
             
             return True
-
-    async def _generate_and_save_keywords(self, paper_id: str, title: str, abstract: str):
-        """
-        LLMでキーワードを生成してFirestoreに保存する（バックグラウンドタスク）。
-        失敗してもいいね操作自体には影響しない。
-        """
-        try:
-            result = await gemini_client.generate_paper_keywords(title, abstract)
-            keywords = result.get("keywords", [])
-            prerequisite_keywords = result.get("prerequisite_keywords", [])
-            
-            if keywords or prerequisite_keywords:
-                await self.repository.update(paper_id, {
-                    "keywords": keywords,
-                    "prerequisiteKeywords": prerequisite_keywords,
-                })
-                print(f"Keywords generated for paper {paper_id}: {keywords}")
-                print(f"Prerequisite keywords: {prerequisite_keywords}")
-        except Exception as e:
-            print(f"Failed to generate keywords for paper {paper_id}: {e}")
 
     async def get_user_library(self, uid: str) -> PaperListResponse:
         """ユーザーのライブラリ（いいねした論文）を取得"""
