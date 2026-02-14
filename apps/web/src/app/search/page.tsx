@@ -21,6 +21,7 @@ import { toast } from "sonner";
 const SEARCH_HISTORY_KEY = "paper-search-history";
 const MAX_HISTORY_ITEMS = 10;
 const SEARCH_SOURCE_KEY = "paper-search-source";
+const ORGANIZED_SWITCH_DELAY_MS = 1500;
 const SOURCE_OPTIONS = [
   { value: "auto", label: "Auto（分野優先）" },
   { value: "all", label: "All（統合）" },
@@ -72,9 +73,13 @@ export default function SearchPage() {
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [searchSource, setSearchSource] = useState<SearchSource>("auto");
   const [resultMode, setResultMode] = useState<ResultMode>("list");
+  const [showOrganizedSwitch, setShowOrganizedSwitch] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const organizedSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const resultMap = useMemo(
     () => new Map(results.map((paper) => [paper.external_id, paper])),
     [results],
@@ -111,6 +116,14 @@ export default function SearchPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (organizedSwitchTimerRef.current) {
+        clearTimeout(organizedSwitchTimerRef.current);
+      }
+    };
+  }, []);
+
   const filteredSuggestions = searchHistory.filter((item) =>
     item.toLowerCase().includes(query.toLowerCase()),
   );
@@ -144,6 +157,11 @@ export default function SearchPage() {
     trimmedQuery: string,
     source: SearchSource,
   ) => {
+    if (organizedSwitchTimerRef.current) {
+      clearTimeout(organizedSwitchTimerRef.current);
+      organizedSwitchTimerRef.current = null;
+    }
+    setShowOrganizedSwitch(false);
     setOrganizing(true);
     try {
       const organized = await searchPapersReclustered({
@@ -155,10 +173,16 @@ export default function SearchPage() {
       });
       setOrganizedClusters(organized.clusters);
       setOrganizedFallbackUsed(Boolean(organized.meta?.fallback_used));
+      if (organized.clusters.length > 0) {
+        organizedSwitchTimerRef.current = setTimeout(() => {
+          setShowOrganizedSwitch(true);
+        }, ORGANIZED_SWITCH_DELAY_MS);
+      }
     } catch (err) {
       console.error(err);
       setOrganizedClusters([]);
       setOrganizedFallbackUsed(true);
+      setShowOrganizedSwitch(false);
       setResultMode("list");
       toast.error("再整理結果の取得に失敗したため、リスト表示に切り替えました");
     } finally {
@@ -186,6 +210,11 @@ export default function SearchPage() {
     setShowSuggestions(false);
     setOrganizedClusters([]);
     setOrganizedFallbackUsed(false);
+    setShowOrganizedSwitch(false);
+    if (organizedSwitchTimerRef.current) {
+      clearTimeout(organizedSwitchTimerRef.current);
+      organizedSwitchTimerRef.current = null;
+    }
 
     try {
       const data = await searchPapers({
@@ -438,7 +467,7 @@ export default function SearchPage() {
                   Organizing... Please wait.
                 </div>
               )}
-              {!organizing && organizedClusters.length > 0 && (
+              {!organizing && showOrganizedSwitch && organizedClusters.length > 0 && (
                 <button
                   type="button"
                   onClick={() => void handleChangeResultMode("organized")}
