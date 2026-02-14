@@ -90,6 +90,13 @@ interface TexCompileResponse {
     log: string | null;
 }
 
+function extractProjectMemoNumber(title: string): number | null {
+    const m = title.match(/Project:\s.+のメモ\s#(\d+)/);
+    if (!m) return null;
+    const n = Number(m[1]);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -155,6 +162,7 @@ export default function ProjectDetailPage({
     const [memoBody, setMemoBody] = useState("");
     const [memoSaving, setMemoSaving] = useState(false);
     const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
+    const [nextProjectMemoNumber, setNextProjectMemoNumber] = useState(1);
     const latexEditorRef = useRef<HTMLTextAreaElement>(null);
     const texFileInputRef = useRef<HTMLInputElement>(null);
     const pdfObjectUrlRef = useRef<string | null>(null);
@@ -203,7 +211,7 @@ export default function ProjectDetailPage({
         fetchProject();
     }, [fetchProject]);
 
-    const fetchProjectMemos = useCallback(async () => {
+    const fetchProjectMemos = useCallback(async (): Promise<MemoResponse[]> => {
         setMemosLoading(true);
         try {
             const data = await getMemos();
@@ -219,8 +227,29 @@ export default function ProjectDetailPage({
                     return bt.localeCompare(at);
                 });
             setProjectMemos(filtered);
+
+            const maxUsedNumber = filtered.reduce((max, memo) => {
+                const n = extractProjectMemoNumber(memo.title || "");
+                return n && n > max ? n : max;
+            }, 0);
+            const storageKey = `project:${id}:next-memo-number`;
+            const storedRaw =
+                typeof window !== "undefined"
+                    ? window.localStorage.getItem(storageKey)
+                    : null;
+            const storedNumber = storedRaw ? Number(storedRaw) : NaN;
+            const baseline = maxUsedNumber + 1;
+            const nextNumber = Number.isFinite(storedNumber)
+                ? Math.max(1, storedNumber, baseline)
+                : Math.max(1, baseline);
+            setNextProjectMemoNumber(nextNumber);
+            if (typeof window !== "undefined") {
+                window.localStorage.setItem(storageKey, String(nextNumber));
+            }
+            return filtered;
         } catch (e) {
             console.error("Failed to load project memos", e);
+            return [];
         } finally {
             setMemosLoading(false);
         }
@@ -230,11 +259,32 @@ export default function ProjectDetailPage({
         fetchProjectMemos();
     }, [fetchProjectMemos]);
 
+    const formatProjectMemoTitle = useCallback((memoNumber: number) => {
+        const projectTitle = project?.title || "Untitled Project";
+        return `Project: ${projectTitle}のメモ #${memoNumber}`;
+    }, [project?.title]);
+
+    const createDefaultProjectMemoTitle = useCallback(() => {
+        return formatProjectMemoTitle(nextProjectMemoNumber);
+    }, [formatProjectMemoTitle, nextProjectMemoNumber]);
+
     const resetMemoEditor = useCallback(() => {
         setEditingMemoId(null);
-        setMemoTitle("");
+        setMemoTitle(createDefaultProjectMemoTitle());
         setMemoBody("");
-    }, []);
+    }, [createDefaultProjectMemoTitle]);
+
+    useEffect(() => {
+        if (activeTab !== "memos") return;
+        if (editingMemoId) return;
+        if (memoTitle.trim()) return;
+        setMemoTitle(createDefaultProjectMemoTitle());
+    }, [
+        activeTab,
+        editingMemoId,
+        memoTitle,
+        createDefaultProjectMemoTitle,
+    ]);
 
     const openMemoEditor = (memo: MemoResponse) => {
         setEditingMemoId(memo.id);
@@ -263,8 +313,16 @@ export default function ProjectDetailPage({
                     refs: [{ ref_type: "project", ref_id: id, note: null }],
                 });
             }
+            const storageKey = `project:${id}:next-memo-number`;
+            const incremented = nextProjectMemoNumber + 1;
+            if (typeof window !== "undefined") {
+                window.localStorage.setItem(storageKey, String(incremented));
+            }
+            setNextProjectMemoNumber(incremented);
             await fetchProjectMemos();
-            resetMemoEditor();
+            setEditingMemoId(null);
+            setMemoBody("");
+            setMemoTitle(formatProjectMemoTitle(incremented));
         } catch (e: unknown) {
             alert(e instanceof Error ? e.message : "メモの保存に失敗しました");
         } finally {

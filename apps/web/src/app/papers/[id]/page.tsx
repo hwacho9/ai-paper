@@ -179,10 +179,12 @@ export default function PaperDetailPage({
         if (!memoTitle.trim() && !memoBody.trim()) return;
         setMemoSaving(true);
         try {
+            const originTag = "論文由来";
             if (paperMemo) {
                 await updateMemo(paperMemo.id, {
                     title: memoTitle.trim(),
                     body: memoBody.trim(),
+                    tags: Array.from(new Set([...(paperMemo.tags || []), originTag])),
                 });
             } else {
                 const refs: MemoRef[] = [
@@ -191,6 +193,7 @@ export default function PaperDetailPage({
                 await createMemo({
                     title: memoTitle.trim(),
                     body: memoBody.trim(),
+                    tags: [originTag],
                     refs,
                 });
             }
