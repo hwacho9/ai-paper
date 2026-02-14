@@ -12,6 +12,7 @@ from app.core.gemini import gemini_client
 from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
 from fastapi import HTTPException
 import uuid
+import traceback
 
 class SearchService:
     def __init__(self):
@@ -54,7 +55,8 @@ class SearchService:
                 
         except Exception as e:
             print(f"Search API Error ({source}): {e}")
-            raise HTTPException(status_code=500, detail=f"Search API Error: {str(e)}")
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Search API Error ({source}): {str(e)}")
 
         # Convert to Response Schema
         items = []
