@@ -4,6 +4,7 @@ Gemini API Client (Fallback for Paper Search)
 import httpx
 import json
 import os
+import uuid
 from app.core.config import settings
 
 class GeminiClient:
@@ -26,6 +27,9 @@ class GeminiClient:
         """
         prompt = f"""
         List {limit} academic papers related to "{query}".
+        IMPORTANT: Return ONLY papers that have a valid DOI (Digital Object Identifier).
+        If a paper does not have a DOI, do NOT include it in the list.
+        
         Return ONLY a raw JSON object (no markdown formatting).
         The JSON should be a list of objects with the following keys:
         - title: str
@@ -33,8 +37,7 @@ class GeminiClient:
         - year: int
         - venue: str (or "arXiv")
         - abstract: str (brief summary)
-        - externalIds: {{ "ArXiv": str, "DOI": str }} (if known, else empty)
-        - openAccessPdf: {{ "url": str }} (optional, if a direct PDF link is known)
+        - externalIds: {{ "ArXiv": str, "DOI": str }} (DOI is required. ArXiv ID is strongly recommended if available)
         
         Example:
         [
@@ -44,8 +47,7 @@ class GeminiClient:
             "year": 2017,
             "venue": "NeurIPS",
             "abstract": "...",
-            "externalIds": {{ "ArXiv": "1706.03762" }},
-            "openAccessPdf": {{ "url": "https://arxiv.org/pdf/1706.03762.pdf" }}
+            "externalIds": {{ "ArXiv": "1706.03762", "DOI": "10.5555/3295222.3295349" }}
           }}
         ]
         """
@@ -66,7 +68,7 @@ class GeminiClient:
             return {
                 "data": [
                     {
-                        "paperId": f"gemini-{i}", # Dummy ID
+                        "paperId": str(uuid.uuid4()), 
                         "title": p.get("title"),
                         "authors": [{"name": a} for a in p.get("authors", [])],
                         "year": p.get("year"),

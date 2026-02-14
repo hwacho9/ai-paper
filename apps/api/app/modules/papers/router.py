@@ -1,7 +1,7 @@
 """
 D-03: ペーパーライブラリ - ルーター
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile
 
 from app.core.firebase_auth import get_current_user
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
@@ -62,3 +62,21 @@ async def ingest_paper(
     if not success:
         raise HTTPException(status_code=404, detail="Paper not found")
     return {"status": "accepted", "message": "Ingestion started"}
+
+@router.post("/{paper_id}/upload", status_code=status.HTTP_202_ACCEPTED)
+async def upload_paper_pdf(
+    paper_id: str,
+    file: UploadFile,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    PDFファイルをアップロードし、インジェストを開始する。
+    """
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        
+    success = await paper_service.upload_and_ingest(paper_id, current_user["uid"], file)
+    if not success:
+        raise HTTPException(status_code=404, detail="Paper not found or upload failed")
+        
+    return {"status": "accepted", "message": "Upload complete and ingestion started"}

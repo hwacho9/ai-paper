@@ -12,11 +12,12 @@ router = APIRouter()
 @router.get("/papers", response_model=SearchResultListResponse)
 async def search_papers(
     q: str = Query(..., min_length=1, description="検索キーワード"),
+    source: str = Query("arxiv", description="検索ソース (arxiv, pubmed, scholar, gemini)"),
     limit: int = 20,
     offset: int = 0,
     current_user: dict = Depends(get_current_user),
 ):
     """
-    外部論文DB（Semantic Scholar）を検索する。
+    外部論文DBを検索する。
     """
-    return await search_service.search_papers(query=q, limit=limit, offset=offset)
+    return await search_service.search_papers(query=q, limit=limit, offset=offset, source=source)
