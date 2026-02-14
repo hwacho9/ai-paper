@@ -81,6 +81,58 @@
 | メソッド | パス                    | 説明     |
 | -------- | ----------------------- | -------- |
 | `GET`    | `/api/v1/search/papers` | 論文検索 |
+| `POST`   | `/api/v1/search/papers/recluster` | 検索結果クラスタ再整理 |
+
+### D-04: `/api/v1/search/papers/recluster` 仕様
+
+- リクエスト
+
+```json
+{
+  "query": "graph neural networks for molecule property prediction",
+  "source": "semantic_scholar",
+  "top_k": 60,
+  "group_target": 4,
+  "include_related": true
+}
+```
+
+- レスポンス
+
+```json
+{
+  "query": "graph neural networks for molecule property prediction",
+  "clusters": [
+    {
+      "cluster_id": "c1",
+      "label": "Message Passing 系",
+      "summary": "分子グラフ上で局所伝播を繰り返す主流系統",
+      "hub_paper": {
+        "paper_id": "paper-001",
+        "title": "Neural Message Passing for Quantum Chemistry",
+        "year": 2017,
+        "source": "semantic_scholar",
+        "score": 0.93,
+        "relation_type": null
+      },
+      "children": [],
+      "related": []
+    }
+  ],
+  "uncertain_items": [],
+  "meta": {
+    "fetched": 60,
+    "latency_ms": 1420,
+    "model": "gemini-2.5-flash",
+    "fallback_used": false
+  }
+}
+```
+
+- 補足
+  - `source` は当面 `auto` / `all` / `arxiv` / `pubmed` / `scholar` / `gemini` を許容。
+  - LLM再整理に失敗した場合は `clusters=[]` とし、`meta.fallback_used=true` を返す。
+  - 既存 `GET /api/v1/search/papers` は互換維持し、フロント側フォールバックに利用する。
 
 ### D-06: キーワード
 

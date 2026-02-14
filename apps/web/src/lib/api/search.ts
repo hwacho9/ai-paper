@@ -1,7 +1,7 @@
 /**
  * 検索関連API
  */
-import { apiGet } from "./client";
+import { apiGet, apiPost } from "./client";
 
 export interface SearchQuery {
   q: string;
@@ -34,6 +34,46 @@ export interface SearchResultListResponse {
   limit: number;
 }
 
+export interface ReclusterSearchRequest {
+  query: string;
+  source?: "auto" | "all" | "arxiv" | "pubmed" | "scholar" | "gemini";
+  top_k?: number;
+  group_target?: number;
+  include_related?: boolean;
+}
+
+export interface ClusterPaperItem {
+  paper_id: string;
+  title: string;
+  year: number | null;
+  source: string;
+  score: number;
+  relation_type: string | null;
+  relation_note: string | null;
+}
+
+export interface SearchCluster {
+  cluster_id: string;
+  label: string;
+  summary: string;
+  hub_paper: ClusterPaperItem;
+  children: ClusterPaperItem[];
+  related: ClusterPaperItem[];
+}
+
+export interface ReclusterSearchResponse {
+  query: string;
+  clusters: SearchCluster[];
+  uncertain_items: ClusterPaperItem[];
+  meta: {
+    fetched?: number;
+    latency_ms?: number;
+    model?: string;
+    fallback_used?: boolean;
+    [key: string]: unknown;
+  };
+}
+
 export function searchPapers(
   query: SearchQuery,
 ): Promise<SearchResultListResponse> {
@@ -47,5 +87,14 @@ export function searchPapers(
 
   return apiGet<SearchResultListResponse>(
     `/api/v1/search/papers?${params.toString()}`,
+  );
+}
+
+export function searchPapersReclustered(
+  payload: ReclusterSearchRequest,
+): Promise<ReclusterSearchResponse> {
+  return apiPost<ReclusterSearchResponse>(
+    "/api/v1/search/papers/recluster",
+    payload,
   );
 }

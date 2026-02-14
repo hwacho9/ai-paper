@@ -52,6 +52,7 @@
 | D-02 | プロジェクト         | [D-02-project.md](./domains/D-02-project.md)                       |
 | D-03 | ペーパーライブラリ   | [D-03-paper-library.md](./domains/D-03-paper-library.md)           |
 | D-04 | 論文検索             | [D-04-paper-search.md](./domains/D-04-paper-search.md)             |
+| D-04+ | 検索結果クラスタ再整理 | [D-04-search-clustered-results.md](./domains/D-04-search-clustered-results.md) |
 | D-05 | 取り込みパイプライン | [D-05-ingestion-pipeline.md](./domains/D-05-ingestion-pipeline.md) |
 | D-06 | キーワード & タグ    | [D-06-keyword-tagging.md](./domains/D-06-keyword-tagging.md)       |
 | D-07 | 関連グラフ           | [D-07-related-graph.md](./domains/D-07-related-graph.md)           |

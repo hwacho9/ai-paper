@@ -4,7 +4,12 @@ D-04: 論文検索 - サービス
 from app.core.semantic_scholar import SemanticScholarClient
 from app.core.gemini import gemini_client
 from app.core.config import settings
-from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
+from app.modules.search.recluster import ReclusterSearchService
+from app.modules.search.schemas import (
+    ReclusterSearchResponse,
+    SearchResultItem,
+    SearchResultListResponse,
+)
 from fastapi import HTTPException
 import logging
 import asyncio
@@ -22,6 +27,7 @@ class SearchService:
         self.pubmed = PubmedClient()
         self.scholar = ScholarClient()
         self.gemini = gemini_client
+        self.recluster_service = ReclusterSearchService(self.gemini)
 
         self._domain_profiles = {
             "pubmed": {
@@ -208,6 +214,29 @@ class SearchService:
         except Exception as exc:
             logger.warning("Search API Warning (%s): %s", source, exc)
             return []
+
+    async def search_papers_reclustered(
+        self,
+        query: str,
+        source: str = "auto",
+        top_k: int = 60,
+        group_target: int = 4,
+        include_related: bool = True,
+        uid: str | None = None,
+    ) -> ReclusterSearchResponse:
+        base = await self.search_papers(
+            query=query,
+            limit=top_k,
+            offset=0,
+            source=source,
+            uid=uid,
+        )
+        return await self.recluster_service.recluster_from_results(
+            query=query,
+            results=base.results,
+            group_target=group_target,
+            include_related=include_related,
+        )
 
     def _infer_sources_by_domain(self, query: str) -> list[str]:
         """
