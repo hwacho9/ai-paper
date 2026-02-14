@@ -220,7 +220,7 @@ export default function MemosPage() {
     } else {
       // 新規作成
       setView({ mode: "editor", paper, existingMemo: null });
-      setEditTitle(`Note: ${paper.title}`);
+      setEditTitle(`Paper: ${paper.title}`);
       setEditBody(`## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n`);
     }
   };
@@ -510,7 +510,7 @@ export default function MemosPage() {
     const paperId = view.paper?.id || paperRef?.ref_id;
     const paperTitle =
       view.paper?.title ||
-      view.existingMemo?.title?.replace("Note: ", "") ||
+      view.existingMemo?.title?.replace(/^(Note|Paper):\s*/, "") ||
       "";
 
     return (

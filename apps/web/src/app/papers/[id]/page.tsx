@@ -171,7 +171,7 @@ export default function PaperDetailPage({
 
     useEffect(() => {
         if (paper && !paperMemo && !memoTitle) {
-            setMemoTitle(`Note: ${paper.title}`);
+            setMemoTitle(`Paper: ${paper.title}`);
         }
     }, [paper, paperMemo, memoTitle]);
 
@@ -336,7 +336,7 @@ export default function PaperDetailPage({
                     onSave={handleSaveMemo}
                     onDelete={handleDeleteMemo}
                     onCreate={() => {
-                        setMemoTitle(`Note: ${paper.title}`);
+                        setMemoTitle(`Paper: ${paper.title}`);
                         setMemoBody(
                             "## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n",
                         );
