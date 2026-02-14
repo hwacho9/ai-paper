@@ -3,17 +3,17 @@
 /**
  * プロジェクト詳細ページ
  * Firestore からプロジェクトデータを取得して表示
- * タブ切替: 参照論文 / メモ / BibTeX Export
+ * タブ切替: LaTeX / メモ / BibTeX Export
  */
 
 import { useState, useEffect, useCallback, use, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GraphView } from "./_components/graph-view";
-import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
+import { apiGet, apiPost } from "@/lib/api/client";
 import { auth } from "@/lib/firebase";
 
-type Tab = "papers" | "latex" | "memos" | "export";
+type Tab = "latex" | "memos" | "export";
 
 interface Project {
     id: string;
@@ -157,20 +157,6 @@ export default function ProjectDetailPage({
                 }),
             );
 
-            const openAddDialog = async () => {
-                setShowAddDialog(true);
-                setSearchQuery("");
-                setLibraryLoading(true);
-                try {
-                    const data =
-                        await apiGet<LibraryResponse>("/api/v1/library");
-                    setLibraryPapers(data.papers);
-                } catch {
-                    setLibraryPapers([]);
-                } finally {
-                    setLibraryLoading(false);
-                }
-            };
             setPaperDetails(details);
         } catch (e: unknown) {
             const message =
@@ -186,18 +172,6 @@ export default function ProjectDetailPage({
     useEffect(() => {
         fetchProject();
     }, [fetchProject]);
-
-    const handleRemovePaper = async (paperId: string) => {
-        if (!confirm("この論文をプロジェクトから削除しますか？")) return;
-        try {
-            await apiDelete(`/api/v1/projects/${id}/papers/${paperId}`);
-            setPapers((prev) => prev.filter((p) => p.paper_id !== paperId));
-        } catch (e: unknown) {
-            const message =
-                e instanceof Error ? e.message : "削除に失敗しました";
-            alert(message);
-        }
-    };
 
     const openAddDialog = async () => {
         setShowAddDialog(true);
@@ -638,7 +612,6 @@ export default function ProjectDetailPage({
 
     const tabs = [
         { key: "latex" as Tab, label: "LaTeX", count: linkedPaperIds.size },
-        { key: "papers" as Tab, label: "参照論文", count: papers.length },
         { key: "memos" as Tab, label: "メモ", count: null },
         { key: "export" as Tab, label: "BibTeX Export", count: null },
     ];
@@ -692,66 +665,6 @@ export default function ProjectDetailPage({
                     </button>
                 ))}
             </div>
-
-            {/* タブコンテンツ: 参照論文 */}
-            {activeTab === "papers" && (
-                <div className="space-y-3">
-                    {papers.length === 0 && (
-                        <div className="text-center py-12 text-muted-foreground">
-                            <div className="text-4xl mb-3">📄</div>
-                            <p>まだ論文が追加されていません</p>
-                        </div>
-                    )}
-                    {papers.map((paper) => {
-                        const detail = paperDetails.get(paper.paper_id);
-                        return (
-                            <Link
-                                key={paper.paper_id}
-                                href={`/papers/${paper.paper_id}`}
-                                className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 cursor-pointer">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-sm font-bold">
-                                    {detail?.year?.toString().slice(-2) || "??"}
-                                </div>
-                                <div className="h-10 w-full bg-muted/30 rounded-xl" />
-                                <div className="space-y-3">
-                                    {[...Array(3)].map((_, i) => (
-                                        <div
-                                            key={i}
-                                            className="glass-card rounded-xl p-4 h-20 bg-muted/20"
-                                        />
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleRemovePaper(paper.paper_id);
-                                    }}
-                                    className="text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                                    title="削除">
-                                    <svg
-                                        className="h-4 w-4"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        strokeWidth={1.5}
-                                        stroke="currentColor">
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                </button>
-                            </Link>
-                        );
-                    })}
-                    <button
-                        onClick={openAddDialog}
-                        className="w-full rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
-                        + 論文を追加
-                    </button>
-                </div>
-            )}
 
             {/* タブコンテンツ: LaTeX */}
             {activeTab === "latex" && (
@@ -916,9 +829,16 @@ export default function ProjectDetailPage({
                                 <h4 className="font-semibold">
                                     参照論文との紐づけ
                                 </h4>
-                                <span className="text-xs text-muted-foreground">
-                                    Linked {linkedPaperIds.size}/{papers.length}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">
+                                        Linked {linkedPaperIds.size}/{papers.length}
+                                    </span>
+                                    <button
+                                        onClick={openAddDialog}
+                                        className="rounded-lg border border-dashed border-border px-2 py-1 text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
+                                        + 論文を追加
+                                    </button>
+                                </div>
                             </div>
                             <pre className="max-h-[180px] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-3 font-mono text-[11px] leading-5 text-muted-foreground">
                                 {highlightedPreview}
@@ -940,23 +860,12 @@ export default function ProjectDetailPage({
                                                     : "border-border bg-muted/10"
                                             }`}>
                                             <div className="flex items-center justify-between gap-2">
-                                                <button
-                                                    onClick={() => {
-                                                        if (firstMatch) {
-                                                            focusEditorRange(
-                                                                firstMatch.start,
-                                                                firstMatch.end,
-                                                            );
-                                                        }
-                                                    }}
+                                                <Link
+                                                    href={`/papers/${meta.paperId}`}
                                                     className="truncate text-left hover:text-primary"
-                                                    title={
-                                                        firstMatch
-                                                            ? "エディタ内の該当箇所へ移動"
-                                                            : "本文中に未出現"
-                                                    }>
+                                                    title="論文詳細ページへ移動">
                                                     {meta.title}
-                                                </button>
+                                                </Link>
                                                 <div className="flex items-center gap-1">
                                                     {firstMatch && (
                                                         <button
