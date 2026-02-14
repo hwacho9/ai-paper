@@ -10,6 +10,7 @@ interface MemoEditorProps {
   body: string;
   saving: boolean;
   keywords: PaperKeywordResponse[];
+  keywordsLoading?: boolean;
   onChangeTitle: (value: string) => void;
   onChangeBody: (value: string) => void;
   onSave: () => Promise<void>;
@@ -25,6 +26,7 @@ export function MemoEditor({
   body,
   saving,
   keywords,
+  keywordsLoading,
   onChangeTitle,
   onChangeBody,
   onSave,
@@ -88,6 +90,7 @@ export function MemoEditor({
             body={body}
             saving={saving}
             keywords={keywords}
+            keywordsLoading={keywordsLoading}
             onChangeTitle={onChangeTitle}
             onChangeBody={onChangeBody}
             onSave={onSave}

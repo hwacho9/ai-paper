@@ -5,7 +5,7 @@
  * データ取得・状態管理を担当し、表示はコンポーネントへ分離
  */
 
-import { use, useState, useEffect, useCallback } from "react";
+import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { apiGet } from "@/lib/api/client";
 import {
@@ -53,7 +53,10 @@ export default function PaperDetailPage({
   const [paperKeywords, setPaperKeywords] = useState<PaperKeywordResponse[]>(
     [],
   );
-  const [keywordsLoading, setKeywordsLoading] = useState(false);
+  const [keywordsLoading, setKeywordsLoading] = useState(true);
+  const [keywordsInitialFetched, setKeywordsInitialFetched] = useState(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingCountRef = useRef(0);
   const [keywordsError, setKeywordsError] = useState<string | null>(null);
 
   const fetchPaper = useCallback(async () => {
@@ -97,20 +100,68 @@ export default function PaperDetailPage({
       setKeywordsError(null);
       const data = await listPaperKeywords(id);
       setPaperKeywords(data.keywords);
+      // キーワードが見つかった場合のみloadingをfalseに
+      if (data.keywords.length > 0) {
+        setKeywordsLoading(false);
+      }
+      return data.keywords.length;
     } catch (e: unknown) {
       setKeywordsError(
         e instanceof Error ? e.message : "キーワードの取得に失敗しました",
       );
-    } finally {
       setKeywordsLoading(false);
+      return -1; // error
     }
   }, [id]);
 
   useEffect(() => {
     fetchPaper();
     fetchMemo();
-    fetchPaperKeywords();
+    fetchPaperKeywords().then((count) => {
+      setKeywordsInitialFetched(true);
+      if (count === 0) {
+        // キーワードが未生成 → ポーリング開始
+        setKeywordsLoading(true);
+      } else {
+        setKeywordsLoading(false);
+      }
+    });
   }, [fetchPaper, fetchMemo, fetchPaperKeywords]);
+
+  // キーワードが0件の場合、ポーリングで生成完了を待つ
+  useEffect(() => {
+    if (!keywordsInitialFetched) return;
+    if (paperKeywords.length > 0) {
+      // 既にキーワードがある → ポーリング不要
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      setKeywordsLoading(false);
+      return;
+    }
+
+    // 0件のときポーリング開始（3秒間隔、最大10回=30秒）
+    pollingCountRef.current = 0;
+    pollingRef.current = setInterval(async () => {
+      pollingCountRef.current++;
+      const count = await fetchPaperKeywords();
+      if ((count && count > 0) || pollingCountRef.current >= 10) {
+        if (pollingRef.current) {
+          clearInterval(pollingRef.current);
+          pollingRef.current = null;
+        }
+        setKeywordsLoading(false);
+      }
+    }, 3000);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [keywordsInitialFetched, paperKeywords.length, fetchPaperKeywords]);
 
   useEffect(() => {
     if (paper && !paperMemo && !memoTitle) {
@@ -257,6 +308,7 @@ export default function PaperDetailPage({
           body={memoBody}
           saving={memoSaving}
           keywords={paperKeywords}
+          keywordsLoading={keywordsLoading}
           onChangeTitle={setMemoTitle}
           onChangeBody={setMemoBody}
           onSave={handleSaveMemo}
