@@ -86,5 +86,47 @@ class GeminiClient:
             print(f"Gemini Vertex AI Error: {e}")
             raise e
 
+    async def generate_paper_keywords(self, title: str, abstract: str) -> dict:
+        """
+        論文のタイトルとAbstractから、キーワードと事前知識キーワードを英語で生成する。
+        
+        Returns:
+            dict: {"keywords": [...], "prerequisite_keywords": [...]}
+        """
+        prompt = f"""You are an academic paper analysis assistant.
+Given the following paper title and abstract, generate two sets of keywords IN ENGLISH:
+
+1. "keywords": 5-8 keywords that describe the main topics, methods, and contributions of this paper.
+2. "prerequisite_keywords": 5-8 keywords representing the prerequisite knowledge a reader needs to understand this paper (e.g., foundational concepts, mathematical/algorithmic background, related fields).
+
+Paper Title: {title}
+
+Abstract: {abstract if abstract else "(No abstract available)"}
+
+Return ONLY a raw JSON object (no markdown formatting, no code blocks).
+Example:
+{{
+  "keywords": ["transformer", "self-attention", "sequence-to-sequence", "machine translation", "neural network architecture"],
+  "prerequisite_keywords": ["recurrent neural networks", "attention mechanism", "encoder-decoder", "backpropagation", "linear algebra"]
+}}
+"""
+        try:
+            response = await self.model.generate_content_async(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+            result = json.loads(response.text)
+            
+            # Ensure the expected keys exist
+            return {
+                "keywords": result.get("keywords", []),
+                "prerequisite_keywords": result.get("prerequisite_keywords", [])
+            }
+        except Exception as e:
+            print(f"Gemini Keyword Generation Error: {e}")
+            # Return empty on failure (non-blocking)
+            return {"keywords": [], "prerequisite_keywords": []}
+
 # Singleton
 gemini_client = GeminiClient()

@@ -22,7 +22,7 @@ class ArxivClient(BaseSearchClient):
         }
         
         async with httpx.AsyncClient() as client:
-            response = await client.get(self.BASE_URL, params=params, timeout=10.0, follow_redirects=True)
+            response = await client.get(self.BASE_URL, params=params, timeout=30.0, follow_redirects=True)
             response.raise_for_status()
             return self._parse_response(response.text)
 

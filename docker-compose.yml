@@ -7,47 +7,47 @@
 # ========================================
 
 services:
-    # ----- フロントエンド (Next.js) -----
-    web:
-        build:
-            context: ./apps/web
-            dockerfile: Dockerfile.dev
-        ports:
-            - "3000:3000"
-        volumes:
-            - ./apps/web/src:/app/src
-            - ./apps/web/public:/app/public
-        environment:
-            - NEXT_PUBLIC_API_URL=http://localhost:8000
-            - WATCHPACK_POLLING=true
-        env_file:
-            - ./apps/web/.env.local
-        depends_on:
-            api:
-                condition: service_healthy
+  # ----- フロントエンド (Next.js) -----
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web/src:/app/src
+      - ./apps/web/public:/app/public
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - WATCHPACK_POLLING=true
+    env_file:
+      - ./apps/web/.env.local
+    depends_on:
+      api:
+        condition: service_healthy
 
-    # ----- バックエンド (FastAPI) -----
-    api:
-        build:
-            context: ./apps/api
-        ports:
-            - "8000:8080"
-        volumes:
-            - ./apps/api/app:/app/app
-            - ./apps/api/worker:/app/worker
-            - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
-            # - ${APPDATA}/gcloud:/root/.config/gcloud:ro
-        env_file:
-            - ./apps/api/.env
-        environment:
-            - PORT=8080
-            - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
-        # ホットリロード有効
-        command: >
-            sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"
-        healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
-            interval: 10s
-            timeout: 3s
-            retries: 3
-            start_period: 10s
+  # ----- バックエンド (FastAPI) -----
+  api:
+    build:
+      context: ./apps/api
+    ports:
+      - "8000:8080"
+    volumes:
+      - ./apps/api/app:/app/app
+      - ./apps/api/worker:/app/worker
+      # - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
+      - ${APPDATA}/gcloud:/root/.config/gcloud:ro
+    env_file:
+      - ./apps/api/.env
+    environment:
+      - PORT=8080
+      - GOOGLE_APPLICATION_CREDENTIALS=/root/.config/gcloud/application_default_credentials.json
+    # ホットリロード有効
+    command: >
+      sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
