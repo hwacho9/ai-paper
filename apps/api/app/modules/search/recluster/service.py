@@ -112,6 +112,7 @@ Rules:
 - Keep "score" between 0.0 and 1.0.
 - Write "label", "summary", and "relation_type" in Japanese.
 - relation_type examples: "発展", "応用", "比較", "サーベイ", "関連".
+- Add "relation_note" in Japanese (max 1 sentence) for children/related items.
 
 JSON schema:
 {{
@@ -127,7 +128,8 @@ JSON schema:
         "year": 2020,
         "source": "string",
         "score": 0.0,
-        "relation_type": null
+        "relation_type": null,
+        "relation_note": null
       }},
       "children": [],
       "related": []

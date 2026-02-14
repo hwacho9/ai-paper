@@ -49,6 +49,7 @@ export interface ClusterPaperItem {
   source: string;
   score: number;
   relation_type: string | null;
+  relation_note: string | null;
 }
 
 export interface SearchCluster {

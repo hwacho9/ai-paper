@@ -586,7 +586,24 @@ export default function SearchPage() {
                                   className="rounded-lg border border-border/60 bg-background/60 p-3"
                                 >
                                   <div className="flex items-center justify-between gap-3">
-                                    <p className="text-sm">{paper.title}</p>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm">{paper.title}</p>
+                                      {(item.relation_type ||
+                                        item.relation_note) && (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {item.relation_type
+                                            ? `関係: ${item.relation_type}`
+                                            : ""}
+                                          {item.relation_type &&
+                                          item.relation_note
+                                            ? " / "
+                                            : ""}
+                                          {item.relation_note
+                                            ? item.relation_note
+                                            : ""}
+                                        </p>
+                                      )}
+                                    </div>
                                     <button
                                       type="button"
                                       onClick={() => handleLike(paper)}
@@ -622,7 +639,24 @@ export default function SearchPage() {
                                   className="rounded-lg border border-border/60 bg-background/60 p-3"
                                 >
                                   <div className="flex items-center justify-between gap-3">
-                                    <p className="text-sm">{paper.title}</p>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm">{paper.title}</p>
+                                      {(item.relation_type ||
+                                        item.relation_note) && (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {item.relation_type
+                                            ? `関係: ${item.relation_type}`
+                                            : ""}
+                                          {item.relation_type &&
+                                          item.relation_note
+                                            ? " / "
+                                            : ""}
+                                          {item.relation_note
+                                            ? item.relation_note
+                                            : ""}
+                                        </p>
+                                      )}
+                                    </div>
                                     <button
                                       type="button"
                                       onClick={() => handleLike(paper)}

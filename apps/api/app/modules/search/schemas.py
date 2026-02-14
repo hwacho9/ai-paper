@@ -50,6 +50,7 @@ class ClusterPaperItem(BaseModel):
     source: str
     score: float = 0.0
     relation_type: str | None = None
+    relation_note: str | None = None
 
 
 class SearchCluster(BaseModel):
