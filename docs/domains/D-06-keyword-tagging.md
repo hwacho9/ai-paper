@@ -69,3 +69,9 @@ papers/{paperId}/keywords/{keywordId}
 # TODO(F-0604): 適合性判断 | AC: キーワード-論文の適合度スコア返却 | owner:@
 # TODO(F-0602): ownerUidベースACLへの移行 | AC: papers.ownerUid導入後、likes依存チェックをownerUid照合に置換 | owner:@
 ```
+
+## 実装メモ（ACL移行）
+
+- 現在のF-0602実装では `KeywordService._ensure_paper_access` が **likesベース** でアクセス可否を判定している。
+- `papers.ownerUid` 導入後は、この関数の判定ロジックを **ownerUid照合ベース** に置換すること。
+- 置換対象をこの関数に集約しているため、移行時の修正箇所は原則ここ1箇所を想定。
