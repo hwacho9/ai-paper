@@ -7,6 +7,8 @@ class KeywordRelatedItem(BaseModel):
     title: str
     authors: List[str]
     year: Optional[int] = None
+    paper_keywords: List[str] = Field(default_factory=list)
+    prerequisite_keywords: List[str] = Field(default_factory=list)
     matched_tag: Optional[str] = None
     candidate_tag: Optional[str] = None
     reason: Optional[str] = None

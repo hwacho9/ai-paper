@@ -47,6 +47,32 @@ export function KeywordRelatedGroupList({ groups }: KeywordRelatedGroupListProps
                                         {paper.authors.join(", ")}
                                         {paper.year && ` · ${paper.year}`}
                                     </p>
+                                    {paper.paper_keywords.length > 0 && (
+                                        <div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {paper.paper_keywords.map((tag) => (
+                                                    <span
+                                                        key={`paper-${paper.paper_id}-${tag}`}
+                                                        className="inline-flex rounded-full border border-sky-300/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-200">
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {paper.prerequisite_keywords.length > 0 && (
+                                        <div>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {paper.prerequisite_keywords.map((tag) => (
+                                                    <span
+                                                        key={`pre-${paper.paper_id}-${tag}`}
+                                                        className="inline-flex rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </Link>
