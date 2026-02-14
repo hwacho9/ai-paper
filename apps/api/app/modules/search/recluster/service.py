@@ -110,6 +110,8 @@ Rules:
 - Use only the provided paper_id values.
 - If uncertain, place papers in "uncertain_items".
 - Keep "score" between 0.0 and 1.0.
+- Write "label", "summary", and "relation_type" in Japanese.
+- relation_type examples: "発展", "応用", "比較", "サーベイ", "関連".
 
 JSON schema:
 {{
@@ -151,7 +153,7 @@ Candidate papers:
             clusters=[
                 {
                     "cluster_id": "fallback-1",
-                    "label": "Fallback Group",
+                    "label": "フォールバックグループ",
                     "summary": "LLM再整理に失敗したため、上位検索結果を表示しています。",
                     "hub_paper": {
                         "paper_id": hub.external_id,
