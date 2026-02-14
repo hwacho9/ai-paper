@@ -5,13 +5,14 @@
  * 「新規メモ」→ マイライブラリから論文を選択 → メモ編集
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   getMemos,
   createMemo,
   updateMemo,
   deleteMemo,
+  listPaperKeywords,
   MemoResponse,
   MemoRef,
 } from "@/lib/api";
@@ -29,6 +30,14 @@ interface LibraryPaper {
 interface LibraryResponse {
   papers: LibraryPaper[];
   total: number;
+}
+interface ProjectSummary {
+  id: string;
+  title: string;
+}
+interface MemoPaperKeywordTag {
+  label: string;
+  kind: "paper" | "prerequisite";
 }
 
 function formatRelativeTime(dateStr: string | null): string {
@@ -75,6 +84,12 @@ export default function MemosPage() {
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [saving, setSaving] = useState(false);
+  const [projectTitles, setProjectTitles] = useState<Record<string, string>>({});
+  const [paperKeywordTags, setPaperKeywordTags] = useState<
+    Record<string, MemoPaperKeywordTag[]>
+  >({});
+  const [maxMemoCardHeight, setMaxMemoCardHeight] = useState<number>(0);
+  const memoCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const fetchMemos = useCallback(async () => {
     try {
@@ -91,6 +106,90 @@ export default function MemosPage() {
   useEffect(() => {
     fetchMemos();
   }, [fetchMemos]);
+
+  useEffect(() => {
+    const projectIds = Array.from(
+      new Set(
+        memos
+          .flatMap((memo) => memo.refs)
+          .filter((ref) => ref.ref_type === "project" && ref.ref_id)
+          .map((ref) => ref.ref_id),
+      ),
+    );
+    const missingIds = projectIds.filter((pid) => !projectTitles[pid]);
+    if (missingIds.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const resolved = await Promise.all(
+        missingIds.map(async (projectId) => {
+          try {
+            const data = await apiGet<ProjectSummary>(`/api/v1/projects/${projectId}`);
+            return [projectId, data.title] as const;
+          } catch {
+            return [projectId, projectId] as const;
+          }
+        }),
+      );
+      if (cancelled) return;
+      setProjectTitles((prev) => {
+        const next = { ...prev };
+        for (const [projectId, title] of resolved) {
+          next[projectId] = title;
+        }
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [memos, projectTitles]);
+
+  useEffect(() => {
+    const paperIds = Array.from(
+      new Set(
+        memos
+          .flatMap((memo) => memo.refs)
+          .filter((ref) => ref.ref_type === "paper" && ref.ref_id)
+          .map((ref) => ref.ref_id),
+      ),
+    );
+    const missingPaperIds = paperIds.filter((pid) => !paperKeywordTags[pid]);
+    if (missingPaperIds.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      const resolved = await Promise.all(
+        missingPaperIds.map(async (paperId) => {
+          try {
+            const data = await listPaperKeywords(paperId);
+            const tags: MemoPaperKeywordTag[] = data.keywords.map((k) => ({
+              label: k.label,
+              kind: k.reason?.includes("prerequisite")
+                ? "prerequisite"
+                : "paper",
+            }));
+            return [paperId, tags] as const;
+          } catch {
+            return [paperId, [] as MemoPaperKeywordTag[]] as const;
+          }
+        }),
+      );
+      if (cancelled) return;
+      setPaperKeywordTags((prev) => {
+        const next = { ...prev };
+        for (const [paperId, tags] of resolved) {
+          next[paperId] = tags;
+        }
+        return next;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [memos, paperKeywordTags]);
 
   /* ---- 新規メモ → 論文選択画面へ ---- */
   const openPaperPicker = async () => {
@@ -121,7 +220,7 @@ export default function MemosPage() {
     } else {
       // 新規作成
       setView({ mode: "editor", paper, existingMemo: null });
-      setEditTitle(`Note: ${paper.title}`);
+      setEditTitle(`Paper: ${paper.title}`);
       setEditBody(`## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n`);
     }
   };
@@ -206,6 +305,16 @@ export default function MemosPage() {
       m.title.toLowerCase().includes(q) || m.body.toLowerCase().includes(q)
     );
   });
+
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      const heights = filtered
+        .map((memo) => memoCardRefs.current[memo.id]?.offsetHeight || 0)
+        .filter((h) => h > 0);
+      setMaxMemoCardHeight(heights.length ? Math.max(...heights) : 0);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [filtered, projectTitles, paperKeywordTags, searchQuery]);
 
   const filteredLibrary = libraryPapers.filter((p) => {
     if (!paperSearch.trim()) return true;
@@ -391,10 +500,17 @@ export default function MemosPage() {
     const paperRef = view.existingMemo?.refs.find(
       (r) => r.ref_type === "paper",
     );
+    const projectRefs = Array.from(
+      new Set(
+        (view.existingMemo?.refs || [])
+          .filter((r) => r.ref_type === "project" && r.ref_id)
+          .map((r) => r.ref_id),
+      ),
+    );
     const paperId = view.paper?.id || paperRef?.ref_id;
     const paperTitle =
       view.paper?.title ||
-      view.existingMemo?.title?.replace("Note: ", "") ||
+      view.existingMemo?.title?.replace(/^(Note|Paper):\s*/, "") ||
       "";
 
     return (
@@ -422,6 +538,21 @@ export default function MemosPage() {
 
         {/* エディタカード */}
         <div className="glass-card rounded-xl p-6 space-y-4">
+          {/* 関連プロジェクトリンク */}
+          {projectRefs.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {projectRefs.map((projectId) => (
+                <Link
+                  key={projectId}
+                  href={`/projects/${projectId}`}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20 transition-colors"
+                >
+                  プロジェクトへ: {projectTitles[projectId] || projectId}
+                </Link>
+              ))}
+            </div>
+          )}
+
           {/* 関連論文バッジ */}
           {paperId && (
             <Link
@@ -616,11 +747,35 @@ export default function MemosPage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {filtered.map((memo) => {
             const paperRef = memo.refs.find((r) => r.ref_type === "paper");
+            const paperTags = paperRef ? paperKeywordTags[paperRef.ref_id] || [] : [];
+            const projectIds = Array.from(
+              new Set(
+                memo.refs
+                  .filter((r) => r.ref_type === "project" && r.ref_id)
+                  .map((r) => r.ref_id),
+              ),
+            );
             return (
               <div key={memo.id} className="relative group">
-                <button
+                <div
+                  ref={(el) => {
+                    memoCardRefs.current[memo.id] = el;
+                  }}
                   onClick={() => openExistingMemo(memo)}
-                  className="glass-card w-full text-left rounded-xl p-4 transition-all duration-200
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openExistingMemo(memo);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  style={
+                    maxMemoCardHeight
+                      ? { minHeight: `${maxMemoCardHeight}px` }
+                      : undefined
+                  }
+                  className="glass-card w-full cursor-pointer text-left rounded-xl p-4 transition-all duration-200 flex flex-col
                     hover:scale-[1.03] hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5
                     focus:outline-none focus:ring-2 focus:ring-primary/30"
                 >
@@ -630,19 +785,59 @@ export default function MemosPage() {
                   <p className="mt-1.5 text-xs text-muted-foreground line-clamp-3 leading-relaxed">
                     {memo.body || "(本文なし)"}
                   </p>
-                  <div className="mt-2 flex items-center justify-between">
-                    {paperRef ? (
-                      <span className="text-[9px] text-primary/60">
-                        📄 論文メモ
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5 overflow-hidden">
+                    {paperRef && (
+                      <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary/80">
+                        論文由来
                       </span>
-                    ) : (
-                      <span />
                     )}
+                    {projectIds.length > 0 && (
+                      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-300">
+                        プロジェクト由来
+                      </span>
+                    )}
+                    {projectIds.map((projectId) => (
+                      <span
+                        key={projectId}
+                        className="rounded-full border border-border bg-muted/30 px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                      >
+                        {projectTitles[projectId] || projectId}
+                      </span>
+                    ))}
+                    {memo.tags
+                      .filter(
+                        (tag) =>
+                          tag &&
+                          tag !== "論文由来" &&
+                          tag !== "プロジェクト由来",
+                      )
+                      .map((tag) => (
+                        <span
+                          key={`${memo.id}-${tag}`}
+                          className="rounded-full border border-border bg-background px-1.5 py-0.5 text-[9px] text-muted-foreground"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    {paperTags.map((tag, idx) => (
+                      <span
+                        key={`${memo.id}-paper-tag-${idx}-${tag.label}`}
+                        className={`rounded-full border px-1.5 py-0.5 text-[9px] ${
+                          tag.kind === "prerequisite"
+                            ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
+                            : "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                        }`}
+                      >
+                        {tag.label}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-auto pt-2 flex items-center justify-end gap-2">
                     <span className="text-[9px] text-muted-foreground">
                       {formatRelativeTime(memo.updated_at)}
                     </span>
                   </div>
-                </button>
+                </div>
                 {/* 削除ボタン */}
                 <button
                   onClick={(e) => {

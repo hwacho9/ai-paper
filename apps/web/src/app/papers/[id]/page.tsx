@@ -205,7 +205,7 @@ export default function PaperDetailPage({
 
     useEffect(() => {
         if (paper && !paperMemo && !memoTitle) {
-            setMemoTitle(`Note: ${paper.title}`);
+            setMemoTitle(`Paper: ${paper.title}`);
         }
     }, [paper, paperMemo, memoTitle]);
 
@@ -213,10 +213,12 @@ export default function PaperDetailPage({
         if (!memoTitle.trim() && !memoBody.trim()) return;
         setMemoSaving(true);
         try {
+            const originTag = "論文由来";
             if (paperMemo) {
                 await updateMemo(paperMemo.id, {
                     title: memoTitle.trim(),
                     body: memoBody.trim(),
+                    tags: Array.from(new Set([...(paperMemo.tags || []), originTag])),
                 });
             } else {
                 const refs: MemoRef[] = [
@@ -225,6 +227,7 @@ export default function PaperDetailPage({
                 await createMemo({
                     title: memoTitle.trim(),
                     body: memoBody.trim(),
+                    tags: [originTag],
                     refs,
                 });
             }
@@ -371,7 +374,7 @@ export default function PaperDetailPage({
                     onSave={handleSaveMemo}
                     onDelete={handleDeleteMemo}
                     onCreate={() => {
-                        setMemoTitle(`Note: ${paper.title}`);
+                        setMemoTitle(`Paper: ${paper.title}`);
                         setMemoBody(
                             "## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n",
                         );
