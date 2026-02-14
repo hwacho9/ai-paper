@@ -2,15 +2,18 @@
 D-04: 論文検索 - サービス
 """
 from app.core.gemini import gemini_client
+from app.modules.papers.repository import PaperRepository
 from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
 from fastapi import HTTPException
 
 class SearchService:
     def __init__(self):
         self.gemini_client = gemini_client
+        self.paper_repository = PaperRepository()
 
     async def search_papers(
         self,
+        uid: str,
         query: str,
         year_from: int | None = None,
         year_to: int | None = None,
@@ -24,7 +27,17 @@ class SearchService:
         try:
             fetch_limit = min(max(limit + offset, limit), 100)
             raw_data = await self.gemini_client.search_papers(query, limit=fetch_limit)
-            items = [self._normalize_paper(paper) for paper in raw_data.get("data", [])]
+            liked_id_set = set(await self.paper_repository.get_user_likes(uid))
+            items = []
+            for paper in raw_data.get("data", []):
+                paper_id = self._resolve_paper_id(paper)
+                items.append(
+                    self._normalize_paper(
+                        paper=paper,
+                        paper_id=paper_id,
+                        is_in_library=paper_id in liked_id_set,
+                    ),
+                )
             filtered_items = self._apply_filters(
                 items=items,
                 year_from=year_from,
@@ -43,7 +56,21 @@ class SearchService:
             print(f"Gemini API Error: {e}")
             raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")
 
-    def _normalize_paper(self, paper: dict) -> SearchResultItem:
+    def _resolve_paper_id(self, paper: dict) -> str:
+        """検索結果から論文IDを決定する。"""
+        paper_id = paper.get("paperId")
+        if paper_id:
+            return paper_id
+
+        import uuid
+        return f"gen-{uuid.uuid4()}"
+
+    def _normalize_paper(
+        self,
+        paper: dict,
+        paper_id: str,
+        is_in_library: bool,
+    ) -> SearchResultItem:
         # Authors
         authors = [a.get("name") for a in paper.get("authors", []) if a.get("name")]
         
@@ -57,12 +84,6 @@ class SearchService:
         if not pdf_url and arxiv_id:
             pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
 
-        # Geminiの結果にpaperIdがない場合は暫定IDを採番
-        paper_id = paper.get("paperId")
-        if not paper_id:
-            import uuid
-            paper_id = f"gen-{uuid.uuid4()}"
-
         return SearchResultItem(
             external_id=paper_id,
             source="gemini",
@@ -75,7 +96,7 @@ class SearchService:
             arxiv_id=arxiv_id,
             pdf_url=pdf_url,
             citation_count=paper.get("citationCount"),
-            is_in_library=False 
+            is_in_library=is_in_library,
         )
 
     def _apply_filters(

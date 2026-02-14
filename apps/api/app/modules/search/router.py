@@ -23,6 +23,7 @@ async def search_papers(
     Geminiベースで論文検索を実行する。
     """
     return await search_service.search_papers(
+        uid=current_user["uid"],
         query=q,
         year_from=year_from,
         year_to=year_to,
