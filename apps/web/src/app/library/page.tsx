@@ -15,23 +15,41 @@ type ViewMode = "grid" | "list";
 
 const statusColors: Record<string, string> = {
   READY: "bg-emerald-500/20 text-emerald-400",
-  INGESTING: "bg-amber-500/20 text-amber-400",
-  PENDING: "bg-gray-500/20 text-gray-400",
+  PROCESSING: "bg-amber-500/20 text-amber-400",
   FAILED: "bg-red-500/20 text-red-400",
 };
 
 const statusLabels: Record<string, string> = {
   READY: "完了",
-  INGESTING: "処理中",
-  PENDING: "保存済",
+  PROCESSING: "処理中",
   FAILED: "失敗",
 };
+
+/**
+ * 論文の処理ステータスを判定
+ * - 論文キーワード + 事前知識キーワード両方が存在 → READY
+ * - それ以外 → PROCESSING
+ */
+function getPaperStatus(paper: PaperResponse): string {
+  const hasPaperKeywords = paper.keywords && paper.keywords.length > 0;
+  const hasPrerequisiteKeywords =
+    paper.prerequisite_keywords && paper.prerequisite_keywords.length > 0;
+
+  if (hasPaperKeywords && hasPrerequisiteKeywords) {
+    return "READY";
+  }
+  if (paper.status === "FAILED") {
+    return "FAILED";
+  }
+  return "PROCESSING";
+}
 
 export default function LibraryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [papers, setPapers] = useState<PaperResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<string>("すべて");
 
   const fetchData = useCallback(async () => {
     try {
@@ -82,6 +100,13 @@ export default function LibraryPage() {
       </div>
     );
   }
+
+  // フィルター処理
+  const filteredPapers = papers.filter((paper) => {
+    if (selectedFilter === "すべて") return true;
+    const status = getPaperStatus(paper);
+    return selectedFilter === statusLabels[status];
+  });
 
   return (
     <div className="space-y-6">
@@ -146,11 +171,12 @@ export default function LibraryPage() {
 
       {/* フィルターバー */}
       <div className="flex flex-wrap gap-2">
-        {["すべて", "READY", "処理中", "キーワード付き"].map((f, i) => (
+        {["すべて", "完了", "処理中", "失敗"].map((f) => (
           <button
             key={f}
+            onClick={() => setSelectedFilter(f)}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              i === 0
+              selectedFilter === f
                 ? "bg-primary/20 text-primary"
                 : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
@@ -170,20 +196,25 @@ export default function LibraryPage() {
             論文を検索する
           </Link>
         </div>
+      ) : filteredPapers.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>このフィルターに該当する論文がありません。</p>
+        </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {papers.map((paper) => (
+          {filteredPapers.map((paper) => (
             <div key={paper.id} className="relative group">
               <Link href={`/papers/${paper.id}`}>
                 <div className="glass-card h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow flex flex-col">
                   <div className="flex items-start justify-between mb-3">
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                        statusColors[paper.status] ||
+                        statusColors[getPaperStatus(paper)] ||
                         "bg-gray-500/20 text-gray-400"
                       }`}
                     >
-                      {statusLabels[paper.status] || paper.status}
+                      {statusLabels[getPaperStatus(paper)] ||
+                        getPaperStatus(paper)}
                     </span>
                   </div>
                   <h3 className="font-semibold leading-snug group-hover:text-primary transition-colors line-clamp-2">
@@ -253,7 +284,7 @@ export default function LibraryPage() {
       ) : (
         /* リストビュー */
         <div className="space-y-2">
-          {papers.map((paper) => (
+          {filteredPapers.map((paper) => (
             <div key={paper.id} className="relative group">
               <Link href={`/papers/${paper.id}`}>
                 <div className="glass-card flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
@@ -264,11 +295,12 @@ export default function LibraryPage() {
                       </h3>
                       <span
                         className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                          statusColors[paper.status] ||
+                          statusColors[getPaperStatus(paper)] ||
                           "bg-gray-500/20 text-gray-400"
                         }`}
                       >
-                        {statusLabels[paper.status] || paper.status}
+                        {statusLabels[getPaperStatus(paper)] ||
+                          getPaperStatus(paper)}
                       </span>
                     </div>
                     <p className="text-sm text-muted-foreground truncate">
