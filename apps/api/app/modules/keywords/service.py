@@ -3,7 +3,10 @@
 from fastapi import HTTPException
 
 from app.modules.keywords.repository import KeywordRepository
+from app.modules.papers.repository import PaperRepository
 from app.modules.keywords.schemas import (
+    PaperKeywordResponse,
+    PaperKeywordTagCreate,
     KeywordCreate,
     KeywordListResponse,
     KeywordResponse,
@@ -14,6 +17,7 @@ from app.modules.keywords.schemas import (
 class KeywordService:
     def __init__(self):
         self.repository = KeywordRepository()
+        self.paper_repository = PaperRepository()
 
     async def create_keyword(self, owner_uid: str, data: KeywordCreate) -> KeywordResponse:
         """キーワード作成（同一ユーザー内label重複禁止）"""
@@ -67,6 +71,55 @@ class KeywordService:
         success = await self.repository.delete(keyword_id=keyword_id, owner_uid=owner_uid)
         if not success:
             raise HTTPException(status_code=404, detail="keyword not found")
+
+    async def tag_paper(
+        self,
+        paper_id: str,
+        owner_uid: str,
+        data: PaperKeywordTagCreate,
+    ) -> PaperKeywordResponse:
+        """論文にキーワードをタグ付け"""
+        keyword = await self.repository.get_by_id(data.keyword_id, owner_uid)
+        if not keyword:
+            raise HTTPException(status_code=404, detail="keyword not found")
+
+        paper = await self.paper_repository.get_by_id(paper_id)
+        if not paper:
+            raise HTTPException(status_code=404, detail="paper not found")
+
+        liked_ids = await self.paper_repository.get_user_likes(owner_uid)
+        if paper_id not in liked_ids:
+            raise HTTPException(status_code=403, detail="paper is not in your library")
+
+        confidence = data.confidence if data.confidence is not None else 1.0
+        if confidence < 0 or confidence > 1:
+            raise HTTPException(status_code=400, detail="confidence must be between 0 and 1")
+
+        tagged = await self.repository.tag_paper_keyword(
+            paper_id=paper_id,
+            keyword_id=data.keyword_id,
+            confidence=confidence,
+            source="manual",
+        )
+        return PaperKeywordResponse(**tagged)
+
+    async def untag_paper(self, paper_id: str, keyword_id: str, owner_uid: str) -> None:
+        """論文からキーワードを解除"""
+        keyword = await self.repository.get_by_id(keyword_id, owner_uid)
+        if not keyword:
+            raise HTTPException(status_code=404, detail="keyword not found")
+
+        paper = await self.paper_repository.get_by_id(paper_id)
+        if not paper:
+            raise HTTPException(status_code=404, detail="paper not found")
+
+        liked_ids = await self.paper_repository.get_user_likes(owner_uid)
+        if paper_id not in liked_ids:
+            raise HTTPException(status_code=403, detail="paper is not in your library")
+
+        removed = await self.repository.untag_paper_keyword(paper_id, keyword_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail="paper keyword not found")
 
     async def suggest(self, paper_id: str) -> list[dict]:
         # TODO(F-0603): LLM/埋め込みベースのキーワード推薦

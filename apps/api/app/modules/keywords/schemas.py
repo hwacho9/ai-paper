@@ -25,3 +25,15 @@ class KeywordResponse(BaseModel):
 class KeywordListResponse(BaseModel):
     keywords: list[KeywordResponse]
     total: int
+
+
+class PaperKeywordTagCreate(BaseModel):
+    keyword_id: str
+    confidence: float | None = None
+
+
+class PaperKeywordResponse(BaseModel):
+    paper_id: str
+    keyword_id: str
+    confidence: float
+    source: str = "manual"

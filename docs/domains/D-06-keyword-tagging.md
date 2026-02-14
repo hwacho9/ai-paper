@@ -66,4 +66,5 @@ papers/{paperId}/keywords/{keywordId}
 # TODO(F-0602): 論文タグ付け | AC: 論文とキーワードの紐付け/解除 | owner:@
 # TODO(F-0603): 自動推薦 | AC: LLM/埋め込みベースのキーワード候補返却 | owner:@
 # TODO(F-0604): 適合性判断 | AC: キーワード-論文の適合度スコア返却 | owner:@
+# TODO(F-0602): ownerUidベースACLへの移行 | AC: papers.ownerUid導入後、likes依存チェックをownerUid照合に置換 | owner:@
 ```
