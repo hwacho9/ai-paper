@@ -49,8 +49,11 @@ export default function PaperDetailPage({
   const [memoBody, setMemoBody] = useState("");
   const [memoTags, setMemoTags] = useState("");
   const [memoSaving, setMemoSaving] = useState(false);
+  const [memoEditing, setMemoEditing] = useState(false);
 
-  const [paperKeywords, setPaperKeywords] = useState<PaperKeywordResponse[]>([]);
+  const [paperKeywords, setPaperKeywords] = useState<PaperKeywordResponse[]>(
+    [],
+  );
   const [keywordsLoading, setKeywordsLoading] = useState(false);
   const [keywordsError, setKeywordsError] = useState<string | null>(null);
 
@@ -81,9 +84,7 @@ export default function PaperDetailPage({
         setMemoTags(related.tags.join(", "));
       } else {
         setPaperMemo(null);
-        setMemoTitle("");
-        setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
-        setMemoTags("");
+        setMemoEditing(false);
       }
     } catch {
       setPaperMemo(null);
@@ -145,6 +146,7 @@ export default function PaperDetailPage({
       }
 
       await fetchMemo();
+      setMemoEditing(false);
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "保存に失敗しました");
     } finally {
@@ -159,8 +161,9 @@ export default function PaperDetailPage({
     try {
       await deleteMemo(paperMemo.id);
       setPaperMemo(null);
-      if (paper) setMemoTitle(`Note: ${paper.title}`);
-      setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
+      setMemoEditing(false);
+      setMemoTitle("");
+      setMemoBody("");
       setMemoTags("");
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "削除に失敗しました");
@@ -249,9 +252,7 @@ export default function PaperDetailPage({
 
       <PaperTabs activeTab={activeTab} onChange={setActiveTab} />
 
-      {activeTab === "overview" && (
-        <OverviewPanel abstract={paper.abstract} />
-      )}
+      {activeTab === "overview" && <OverviewPanel abstract={paper.abstract} />}
 
       {activeTab === "pdf" && (
         <PdfPanel title={paper.title} pdfUrl={paper.pdf_url} />
@@ -261,6 +262,7 @@ export default function PaperDetailPage({
         <MemoEditor
           memo={paperMemo}
           loading={memosLoading}
+          editing={memoEditing}
           title={memoTitle}
           body={memoBody}
           tags={memoTags}
@@ -270,12 +272,16 @@ export default function PaperDetailPage({
           onChangeTags={setMemoTags}
           onSave={handleSaveMemo}
           onDelete={handleDeleteMemo}
+          onCreate={() => {
+            setMemoTitle(`Note: ${paper.title}`);
+            setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
+            setMemoTags("");
+            setMemoEditing(true);
+          }}
         />
       )}
 
-      {activeTab === "related" && (
-        <RelatedPanel />
-      )}
+      {activeTab === "related" && <RelatedPanel />}
     </div>
   );
 }

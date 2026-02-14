@@ -4,7 +4,6 @@ D-03: ペーパーライブラリ - サービス
 from app.modules.papers.repository import PaperRepository
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
 
-from app.modules.memos.service import memo_service 
 from fastapi import UploadFile
 
 class PaperService:
@@ -15,7 +14,6 @@ class PaperService:
         """
         いいねをトグル（ON/OFF）する。
         論文がDBになければ作成する。
-        いいねON時にメモを自動生成し、キーワードをLLMで生成する。
         
         Returns:
             bool: トグル後の状態 (True: Liked, False: Unliked)
@@ -24,7 +22,8 @@ class PaperService:
         
         # 1. 論文がDBにあるか確認、なければ作成
         paper = await self.repository.get_by_id(paper_id)
-        if not paper:
+        is_new_paper = paper is None
+        if is_new_paper:
             paper = await self.repository.create(paper_id, paper_data.model_dump())
 
         # 2. 現在のいいね状態を確認
@@ -38,11 +37,11 @@ class PaperService:
         else:
             # Like
             await self.repository.add_like(uid, paper_id)
-            # メモ自動生成トリガー
-            await memo_service.create_auto_memo(uid, paper_id, paper_data.title)
-            # キーワード自動推薦（LLM）
-            from app.modules.keywords.service import keyword_service
-            await keyword_service.suggest_for_new_library_paper(paper_id, uid)
+            
+            # 新規追加時のみキーワード推薦を実行
+            if is_new_paper:
+                from app.modules.keywords.service import keyword_service
+                await keyword_service.suggest_for_new_library_paper(paper_id, uid)
             
             # Ingestion Trigger (Auto-Ingest)
             # URLがある場合のみトリガー
