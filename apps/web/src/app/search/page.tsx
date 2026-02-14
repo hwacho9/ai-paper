@@ -471,22 +471,39 @@ export default function SearchPage() {
           {resultMode === "list" && (
             <div className="space-y-3">
               {organizing && (
-                <div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs text-muted-foreground">
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-primary" />
-                  Organizing... Please wait.
+                <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/40 border-t-primary" />
+                    Organizing now...
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    結果を「重要論文中心」に再整理しています。完了後に切替できます。
+                  </p>
                 </div>
               )}
               {!organizing &&
                 !organizedFallbackUsed &&
                 showOrganizedSwitch &&
                 organizedClusters.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => void handleChangeResultMode("organized")}
-                  className="rounded-lg bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition hover:bg-primary/20"
-                >
-                  Organized表示に切り替える
-                </button>
+                  <div className="rounded-xl border border-primary/40 bg-primary/15 px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-primary">
+                          Organized View Ready
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          重要論文と発展・関連の整理結果を確認できます。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleChangeResultMode("organized")}
+                        className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90"
+                      >
+                        Organized表示へ
+                      </button>
+                    </div>
+                  </div>
                 )}
               {results.map((paper) => (
                 <div
