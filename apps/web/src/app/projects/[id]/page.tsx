@@ -129,6 +129,7 @@ export default function ProjectDetailPage({
     const [libraryPapers, setLibraryPapers] = useState<LibraryPaper[]>([]);
     const [libraryLoading, setLibraryLoading] = useState(false);
     const [addingPaperId, setAddingPaperId] = useState<string | null>(null);
+    const [removingPaperId, setRemovingPaperId] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const [texFiles, setTexFiles] = useState<TexFileItem[]>([]);
     const [selectedTexPath, setSelectedTexPath] = useState("main.tex");
@@ -332,6 +333,26 @@ export default function ProjectDetailPage({
             alert(message);
         } finally {
             setAddingPaperId(null);
+        }
+    };
+
+    const handleRemovePaper = async (paperId: string) => {
+        if (!confirm("この文献をプロジェクトから削除しますか？")) return;
+        setRemovingPaperId(paperId);
+        try {
+            await apiDelete(`/api/v1/projects/${id}/papers/${paperId}`);
+            setPapers((prev) => prev.filter((p) => p.paper_id !== paperId));
+            setPaperDetails((prev) => {
+                const next = new Map(prev);
+                next.delete(paperId);
+                return next;
+            });
+        } catch (e: unknown) {
+            const message =
+                e instanceof Error ? e.message : "文献の削除に失敗しました";
+            alert(message);
+        } finally {
+            setRemovingPaperId(null);
         }
     };
 
@@ -1249,34 +1270,64 @@ export default function ProjectDetailPage({
                         )}
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="glass-card rounded-xl p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                            <h4 className="font-semibold">プロジェクト内の文献</h4>
+                            <button
+                                onClick={openAddDialog}
+                                className="rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
+                                + 文献を追加
+                            </button>
+                        </div>
+                        <div className="space-y-2">
                         {paperMeta.length === 0 && (
                             <div className="text-center py-12 text-muted-foreground">
                                 <div className="text-4xl mb-3">📚</div>
                                 <p>プロジェクト内の文献はまだありません</p>
+                                <button
+                                    onClick={openAddDialog}
+                                    className="mt-4 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs text-primary hover:bg-primary hover:text-primary-foreground transition-colors">
+                                    文献を追加
+                                </button>
                             </div>
                         )}
                         {paperMeta.map((meta) => {
                             const detail = paperDetails.get(meta.paperId);
                             return (
-                                <Link
+                                <div
                                     key={meta.paperId}
-                                    href={`/papers/${meta.paperId}`}
                                     className="glass-card group flex items-center gap-3 rounded-xl p-3 transition-all hover:border-primary/40">
-                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                                        {detail?.year?.toString().slice(-2) || "??"}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="truncate text-sm font-medium">
-                                            {meta.title}
-                                        </p>
-                                        <p className="truncate text-xs text-muted-foreground">
-                                            {detail?.authors.join(", ") || "Author不明"}
-                                        </p>
-                                    </div>
-                                </Link>
+                                    <Link
+                                        href={`/papers/${meta.paperId}`}
+                                        className="flex min-w-0 flex-1 items-center gap-3">
+                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                            {detail?.year?.toString().slice(-2) ||
+                                                "??"}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium">
+                                                {meta.title}
+                                            </p>
+                                            <p className="truncate text-xs text-muted-foreground">
+                                                {detail?.authors.join(", ") ||
+                                                    "Author不明"}
+                                            </p>
+                                        </div>
+                                    </Link>
+                                    <button
+                                        onClick={() =>
+                                            void handleRemovePaper(meta.paperId)
+                                        }
+                                        disabled={removingPaperId === meta.paperId}
+                                        className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-300 hover:bg-red-500/20 disabled:opacity-60">
+                                        {removingPaperId === meta.paperId
+                                            ? "削除中..."
+                                            : "削除"}
+                                    </button>
+                                </div>
                             );
                         })}
+                        </div>
                     </div>
                 </div>
             )}
