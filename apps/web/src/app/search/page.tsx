@@ -159,7 +159,8 @@ export default function SearchPage() {
       console.error(err);
       setOrganizedClusters([]);
       setOrganizedFallbackUsed(true);
-      toast.error("再整理結果の取得に失敗しました");
+      setResultMode("list");
+      toast.error("再整理結果の取得に失敗したため、リスト表示に切り替えました");
     } finally {
       setOrganizing(false);
     }
