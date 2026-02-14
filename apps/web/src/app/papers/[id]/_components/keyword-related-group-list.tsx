@@ -13,11 +13,6 @@ export function KeywordRelatedGroupList({ groups }: KeywordRelatedGroupListProps
                     <h3 className="text-sm font-semibold text-primary">
                         {group.keyword}
                     </h3>
-                    {group.items.length === 0 && (
-                        <p className="rounded-lg border border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
-                            該当なし
-                        </p>
-                    )}
                     {group.items.map((paper) => (
                         <Link
                             key={`${group.keyword}-${paper.paper_id}`}

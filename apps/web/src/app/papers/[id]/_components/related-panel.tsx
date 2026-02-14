@@ -20,6 +20,7 @@ export function RelatedPanel({ paperId }: RelatedPanelProps) {
         useState<LibraryRelatedByKeywordResponse["meta"] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const visibleGroups = groups.filter((group) => group.items.length > 0);
 
     useEffect(() => {
         const fetchRelated = async () => {
@@ -59,7 +60,7 @@ export function RelatedPanel({ paperId }: RelatedPanelProps) {
         );
     }
 
-    if (groups.length === 0) {
+    if (visibleGroups.length === 0) {
         return (
             <div className="text-center py-12 text-muted-foreground">
                 関連論文が見つかりませんでした
@@ -70,7 +71,7 @@ export function RelatedPanel({ paperId }: RelatedPanelProps) {
     return (
         <div className="space-y-6">
             <KeywordRelatedSummary meta={meta} />
-            <KeywordRelatedGroupList groups={groups} />
+            <KeywordRelatedGroupList groups={visibleGroups} />
         </div>
     );
 }
