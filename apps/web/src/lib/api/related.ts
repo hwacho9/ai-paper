@@ -29,6 +29,30 @@ export interface GraphData {
     edges: Edge[];
 }
 
+export interface KeywordRelatedItem {
+    paper_id: string;
+    title: string;
+    authors: string[];
+    year?: number | null;
+    reason?: string | null;
+    score: number;
+}
+
+export interface KeywordRelatedGroup {
+    keyword: string;
+    items: KeywordRelatedItem[];
+}
+
+export interface LibraryRelatedByKeywordResponse {
+    paper_id: string;
+    groups: KeywordRelatedGroup[];
+    meta: {
+        library_size?: number;
+        keywords_used?: number;
+        deduped_count?: number;
+    };
+}
+
 export const relatedApi = {
     getRelatedPapers: async (
         paperId: string,
@@ -45,5 +69,15 @@ export const relatedApi = {
 
     getGlobalGraph: async (): Promise<GraphData> => {
         return apiGet<GraphData>("/api/v1/graph");
+    },
+
+    getLibraryRelatedByKeywords: async (
+        paperId: string,
+        perKeywordLimit: number = 15,
+        maxKeywords: number = 8,
+    ): Promise<LibraryRelatedByKeywordResponse> => {
+        return apiGet<LibraryRelatedByKeywordResponse>(
+            `/api/v1/papers/${paperId}/library-related-by-keywords?per_keyword_limit=${perKeywordLimit}&max_keywords=${maxKeywords}`,
+        );
     },
 };
