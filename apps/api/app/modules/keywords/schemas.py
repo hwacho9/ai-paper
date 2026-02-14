@@ -35,5 +35,12 @@ class PaperKeywordTagCreate(BaseModel):
 class PaperKeywordResponse(BaseModel):
     paper_id: str
     keyword_id: str
+    label: str
+    description: str = ""
     confidence: float
     source: str = "manual"
+
+
+class PaperKeywordListResponse(BaseModel):
+    keywords: list[PaperKeywordResponse]
+    total: int

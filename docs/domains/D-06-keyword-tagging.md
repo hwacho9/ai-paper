@@ -55,6 +55,7 @@ papers/{paperId}/keywords/{keywordId}
 | `GET`    | `/api/v1/keywords`                       | キーワード一覧       |
 | `PATCH`  | `/api/v1/keywords/:id`                   | キーワード更新       |
 | `DELETE` | `/api/v1/keywords/:id`                   | キーワード削除       |
+| `GET`    | `/api/v1/papers/:id/keywords`            | 論文のキーワード一覧 |
 | `POST`   | `/api/v1/papers/:id/keywords`            | 論文にキーワード付与 |
 | `DELETE` | `/api/v1/papers/:id/keywords/:keywordId` | キーワード解除       |
 | `POST`   | `/api/v1/papers/:id/keywords/suggest`    | 自動キーワード推薦   |
