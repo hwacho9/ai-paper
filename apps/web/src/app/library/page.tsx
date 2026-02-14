@@ -5,7 +5,13 @@
  * グリッド/リスト切替 + ソート + フィルター + ライブラリ削除
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import {
+    useState,
+    useEffect,
+    useCallback,
+    useMemo,
+    type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import Link from "next/link";
 import {
     askLibrary,
@@ -114,6 +120,24 @@ export default function LibraryPage() {
         }));
     };
 
+    const buildCitationLink = (citation: {
+        paper_id: string;
+        chunk_id: string;
+        page_range: number[];
+        snippet: string;
+    }) => {
+        const targetPage = Math.max(1, citation.page_range?.[0] || 1);
+        const normalizedSnippet = citation.snippet
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 120);
+        const highlightQuery = normalizedSnippet
+            ? `&hl=${encodeURIComponent(normalizedSnippet)}`
+            : "";
+
+        return `/papers/${citation.paper_id}?tab=pdf&page=${targetPage}&chunk=${citation.chunk_id}${highlightQuery}`;
+    };
+
     const fetchData = useCallback(async () => {
         try {
             const libraryData = await getLibrary();
@@ -204,6 +228,17 @@ export default function LibraryPage() {
             setIsAsking(false);
         }
     }, [question]);
+
+    const handleQuestionKeyDown = useCallback(
+        (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+            if (e.metaKey && e.key === "Enter") {
+                e.preventDefault();
+                if (isAsking || !question.trim()) return;
+                void handleAskLibrary();
+            }
+        },
+        [handleAskLibrary, isAsking, question],
+    );
 
     if (loading) {
         return (
@@ -304,6 +339,7 @@ export default function LibraryPage() {
                 <textarea
                     value={question}
                     onChange={(e) => setQuestion(e.target.value)}
+                    onKeyDown={handleQuestionKeyDown}
                     placeholder="例: この分野の論文はどの方法が主流ですか？"
                     className="w-full min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
@@ -372,7 +408,9 @@ export default function LibraryPage() {
                                                             {group.items.map((c) => (
                                                                 <Link
                                                                     key={`${c.paper_id}-${c.chunk_id}`}
-                                                                    href={`/papers/${c.paper_id}?tab=pdf&page=${Math.max(1, c.page_range?.[0] || 1)}&chunk=${c.chunk_id}`}
+                                                                    href={buildCitationLink(
+                                                                        c,
+                                                                    )}
                                                                     className="block rounded-md border border-border/60 bg-background p-3 transition-colors hover:border-primary/40 hover:bg-muted/30">
                                                                     <p className="text-xs text-muted-foreground">
                                                                         chunk:{" "}

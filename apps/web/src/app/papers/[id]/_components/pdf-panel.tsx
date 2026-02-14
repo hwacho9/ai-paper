@@ -2,24 +2,31 @@ interface PdfPanelProps {
   title: string;
   pdfUrl: string | null;
   page?: number;
+  highlightText?: string;
 }
 
-export function PdfPanel({ title, pdfUrl, page = 1 }: PdfPanelProps) {
+export function PdfPanel({
+  title,
+  pdfUrl,
+  page = 1,
+  highlightText = "",
+}: PdfPanelProps) {
   const clampPage = page > 0 ? Math.floor(page) : 1;
-  const withPageHash = (targetUrl: string) => {
-    if (clampPage <= 1) return targetUrl;
+  const normalizedHighlight = highlightText.trim().slice(0, 120);
 
-    try {
-      const url = new URL(targetUrl);
-      url.hash = `page=${clampPage}`;
-      return url.toString();
-    } catch {
-      return `${targetUrl.split("#")[0]}#page=${clampPage}`;
+  const buildPdfViewerUrl = (targetUrl: string) => {
+    const cleanUrl = targetUrl.split("#")[0];
+    const hashParams = new URLSearchParams();
+    hashParams.set("page", String(clampPage));
+    if (normalizedHighlight) {
+      hashParams.set("search", normalizedHighlight);
     }
+
+    return `${cleanUrl}#${hashParams.toString()}`;
   };
 
-  const pdfViewUrl = pdfUrl ? withPageHash(pdfUrl) : "";
-  const downloadUrl = pdfUrl ? withPageHash(pdfUrl) : "#";
+  const pdfViewUrl = pdfUrl ? buildPdfViewerUrl(pdfUrl) : "";
+  const downloadUrl = pdfUrl ? buildPdfViewerUrl(pdfUrl) : "#";
 
   if (!pdfUrl) {
     return (
