@@ -6,6 +6,12 @@ from app.modules.papers.repository import PaperRepository
 from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
 from fastapi import HTTPException
 
+from app.core.search import ArxivClient, PubmedClient, ScholarClient, SearchResult
+from app.core.gemini import gemini_client
+from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
+from fastapi import HTTPException
+import uuid
+
 class SearchService:
     def __init__(self):
         self.gemini_client = gemini_client

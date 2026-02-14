@@ -40,11 +40,11 @@ def upsert_index(paper_id: str, chunks: list[dict], owner_uid: str) -> None:
                 continue
                 
             datapoints.append({
-                "id": chunk["chunk_id"],
-                "embedding": chunk["embedding"],
+                "datapoint_id": chunk["chunk_id"],
+                "feature_vector": chunk["embedding"],
                 "restricts": [
-                    {"namespace": "paper_id", "allow": [paper_id]},
-                    {"namespace": "owner_uid", "allow": [owner_uid]}
+                    {"namespace": "paper_id", "allow_list": [paper_id]},
+                    {"namespace": "owner_uid", "allow_list": [owner_uid]}
                 ]
             })
             

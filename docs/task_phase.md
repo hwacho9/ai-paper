@@ -69,7 +69,7 @@
 ### バックエンド/パイプライン
 
 - [x] **D-05 Ingestion**: PDF Upload & Parsing Pipeline
-    - [ ] PDF Upload API -> Firebase Storage
+    - [x] PDF Upload API -> Firebase Storage
     - [x] Cloud Run Job Worker (Parse/Chunk/Embed/Index)
     - [x] Vector Search Indexing
 - [ ] **D-09 Reading**: チャンク単位のハイライト/引用

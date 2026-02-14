@@ -142,8 +142,11 @@ async def _ensure_pdf_in_storage(storage_path: str, pdf_url: str) -> None:
     
     async with httpx.AsyncClient() as client:
         # User-Agentを設定しないと拒否されるサイトがあるため設定
-        headers = {"User-Agent": "Mozilla/5.0 (AI Research Paper Assistant)"}
-        response = await client.get(pdf_url, headers=headers, follow_redirects=True)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Accept": "application/pdf,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        response = await client.get(pdf_url, headers=headers, follow_redirects=True, timeout=30.0)
         response.raise_for_status()
         pdf_content = response.content
 
