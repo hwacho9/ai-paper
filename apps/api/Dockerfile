@@ -4,8 +4,17 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# curlインストール（ヘルスチェック用）
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# curl + LaTeXコンパイラ（pdflatex）をインストール
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  curl \
+  biber \
+  lmodern \
+  texlive-bibtex-extra \
+  texlive-latex-base \
+  texlive-latex-recommended \
+  texlive-latex-extra \
+  texlive-fonts-recommended \
+  && rm -rf /var/lib/apt/lists/*
 
 # 依存パッケージのインストール（キャッシュ活用）
 COPY requirements.txt .

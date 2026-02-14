@@ -6,11 +6,12 @@
  * タブ切替: 参照論文 / メモ / BibTeX Export
  */
 
-import { useState, useEffect, useCallback, use } from "react";
+import { useState, useEffect, useCallback, use, useMemo, useRef } from "react";
 import Link from "next/link";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
+import { auth } from "@/lib/firebase";
 
-type Tab = "papers" | "memos" | "export";
+type Tab = "papers" | "latex" | "memos" | "export";
 
 interface Project {
   id: string;
@@ -55,13 +56,47 @@ interface LibraryResponse {
   total: number;
 }
 
+interface MentionMatch {
+  start: number;
+  end: number;
+  paperId: string;
+  label: string;
+}
+
+interface TexFileItem {
+  path: string;
+  size: number;
+  contentType: string;
+  updatedAt: string;
+}
+
+interface TexFileContentResponse {
+  path: string;
+  content: string;
+}
+
+interface TexCompileResponse {
+  pdf_path: string;
+  pdf_url: string | null;
+  log: string | null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function makeCiteKey(paperId: string): string {
+  const key = paperId.replace(/[^a-zA-Z0-9:_-]/g, "");
+  return key || "paper";
+}
+
 export default function ProjectDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [activeTab, setActiveTab] = useState<Tab>("papers");
+  const [activeTab, setActiveTab] = useState<Tab>("latex");
   const [project, setProject] = useState<Project | null>(null);
   const [papers, setPapers] = useState<ProjectPaper[]>([]);
   const [paperDetails, setPaperDetails] = useState<Map<string, PaperDetail>>(
@@ -76,6 +111,21 @@ export default function ProjectDetailPage({
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [addingPaperId, setAddingPaperId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [texFiles, setTexFiles] = useState<TexFileItem[]>([]);
+  const [selectedTexPath, setSelectedTexPath] = useState("main.tex");
+  const [texLoading, setTexLoading] = useState(false);
+  const [texSaving, setTexSaving] = useState(false);
+  const [isCompiling, setIsCompiling] = useState(false);
+  const [filesCollapsed, setFilesCollapsed] = useState(true);
+  const [compileLog, setCompileLog] = useState<string | null>(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [latexContent, setLatexContent] = useState(
+    "\\section{Introduction}\n\n",
+  );
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const latexEditorRef = useRef<HTMLTextAreaElement>(null);
+  const texFileInputRef = useRef<HTMLInputElement>(null);
+  const pdfObjectUrlRef = useRef<string | null>(null);
 
   const fetchProject = useCallback(async () => {
     try {
@@ -181,6 +231,109 @@ export default function ProjectDetailPage({
     }
   };
 
+  const insertCitationAtCursor = (citeKey: string) => {
+    const citation = `\\cite{${citeKey}}`;
+    const textarea = latexEditorRef.current;
+    if (!textarea) {
+      setLatexContent((prev) => `${prev}${prev.endsWith("\n") ? "" : "\n"}${citation}`);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? latexContent.length;
+    const end = textarea.selectionEnd ?? latexContent.length;
+    const next =
+      latexContent.slice(0, start) + citation + latexContent.slice(end);
+    setLatexContent(next);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const cursor = start + citation.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const focusEditorRange = useCallback((start: number, end?: number) => {
+    const textarea = latexEditorRef.current;
+    if (!textarea) return;
+    textarea.focus();
+    const safeEnd = end ?? start;
+    textarea.setSelectionRange(start, safeEnd);
+  }, []);
+
+  const handleSelectTexFile = async (path: string) => {
+    if (isTextTexFile(selectedTexPath)) {
+      await saveCurrentTexFile();
+    }
+    setSelectedTexPath(path);
+    if (isTextTexFile(path)) {
+      await loadTexFileContent(path);
+    } else {
+      setLatexContent("");
+    }
+  };
+
+  const handleUploadTexFiles = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = e.target.files;
+    if (!files) return;
+    const token = await auth?.currentUser?.getIdToken();
+    if (!token) return;
+
+    for (const file of Array.from(files)) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("path", file.name);
+
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/projects/${id}/tex/upload`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        },
+      );
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || "upload failed");
+      }
+    }
+    if (texFileInputRef.current) {
+      texFileInputRef.current.value = "";
+    }
+    await fetchTexFiles();
+  };
+
+  const handleDeleteTexFile = async (path: string) => {
+    if (!confirm(`"${path}" を削除しますか？`)) return;
+    await apiDelete(`/api/v1/projects/${id}/tex/file?path=${encodeURIComponent(path)}`);
+    await fetchTexFiles();
+    if (selectedTexPath === path) {
+      setSelectedTexPath("main.tex");
+      await loadTexFileContent("main.tex");
+    }
+  };
+
+  const handleCompileTex = async () => {
+    setIsCompiling(true);
+    setCompileLog(null);
+    try {
+      await saveCurrentTexFile();
+      const compiled = await apiPost<TexCompileResponse>(
+        `/api/v1/projects/${id}/tex/compile`,
+        { main_file: "main.tex" },
+      );
+      setPdfPreviewUrl(compiled.pdf_url);
+      setCompileLog(compiled.log || null);
+    } catch (e: unknown) {
+      setCompileLog(e instanceof Error ? e.message : "コンパイル失敗");
+    } finally {
+      setIsCompiling(false);
+    }
+  };
+
   // ダイアログ内のフィルタリング（既に追加済みを除外 + 検索クエリ）
   const existingPaperIds = new Set(papers.map((p) => p.paper_id));
   const filteredLibraryPapers = libraryPapers.filter((p) => {
@@ -192,6 +345,235 @@ export default function ProjectDetailPage({
       p.authors.some((a) => a.toLowerCase().includes(q))
     );
   });
+
+  const isTextTexFile = (path: string) =>
+    /\.(tex|bib|sty|cls|bst|txt)$/i.test(path);
+
+  const fetchTexFiles = useCallback(async () => {
+    setTexLoading(true);
+    try {
+      const filesRaw = await apiGet<
+        Array<{
+          path: string;
+          size?: number | null;
+          content_type?: string | null;
+          updated_at?: string | null;
+        }>
+      >(`/api/v1/projects/${id}/tex/files`);
+      const files: TexFileItem[] = filesRaw.map((f) => ({
+        path: f.path,
+        size: f.size ?? 0,
+        contentType: f.content_type ?? "",
+        updatedAt: f.updated_at ?? "",
+      }));
+
+      const hasMain = files.some((f) => f.path === "main.tex");
+      if (!hasMain) {
+        const title = project?.title || "My Project";
+        const initialTex = `\\documentclass{article}\n\\usepackage[utf8]{inputenc}\n\\title{${title}}\n\\author{}\n\\date{}\n\n\\begin{document}\n\\maketitle\n\n\\section{Introduction}\n\n\\end{document}\n`;
+        await apiPost(`/api/v1/projects/${id}/tex/file`, {
+          path: "main.tex",
+          content: initialTex,
+        });
+        files.push({
+          path: "main.tex",
+          size: initialTex.length,
+          contentType: "text/x-tex",
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      files.sort((a, b) => a.path.localeCompare(b.path));
+      setTexFiles(files);
+      if (!files.some((f) => f.path === selectedTexPath)) {
+        setSelectedTexPath("main.tex");
+      }
+    } finally {
+      setTexLoading(false);
+    }
+  }, [id, project?.title, selectedTexPath]);
+
+  const loadTexFileContent = useCallback(
+    async (path: string) => {
+      if (!isTextTexFile(path)) return;
+      const data = await apiGet<TexFileContentResponse>(
+        `/api/v1/projects/${id}/tex/file?path=${encodeURIComponent(path)}`,
+      );
+      setLatexContent(data.content);
+    },
+    [id],
+  );
+
+  const saveCurrentTexFile = useCallback(async () => {
+    if (!isTextTexFile(selectedTexPath)) return;
+    setTexSaving(true);
+    try {
+      await apiPost(`/api/v1/projects/${id}/tex/file`, {
+        path: selectedTexPath,
+        content: latexContent,
+      });
+      setLastSavedAt(new Date().toLocaleTimeString());
+      await fetchTexFiles();
+    } finally {
+      setTexSaving(false);
+    }
+  }, [fetchTexFiles, id, latexContent, selectedTexPath]);
+
+  const fetchTexPreview = useCallback(async () => {
+    const data = await apiGet<TexCompileResponse>(
+      `/api/v1/projects/${id}/tex/preview?main_file=${encodeURIComponent("main.tex")}`,
+    );
+    if (data.pdf_url) {
+      if (pdfObjectUrlRef.current) {
+        URL.revokeObjectURL(pdfObjectUrlRef.current);
+        pdfObjectUrlRef.current = null;
+      }
+      setPdfPreviewUrl(data.pdf_url);
+      return;
+    }
+
+    const token = await auth?.currentUser?.getIdToken();
+    if (!token) {
+      setPdfPreviewUrl(null);
+      return;
+    }
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/projects/${id}/tex/preview/pdf?main_file=${encodeURIComponent("main.tex")}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    if (!res.ok) {
+      setPdfPreviewUrl(null);
+      return;
+    }
+    const blob = await res.blob();
+    if (pdfObjectUrlRef.current) {
+      URL.revokeObjectURL(pdfObjectUrlRef.current);
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    pdfObjectUrlRef.current = objectUrl;
+    setPdfPreviewUrl(objectUrl);
+  }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfObjectUrlRef.current) {
+        URL.revokeObjectURL(pdfObjectUrlRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== "latex") return;
+
+    fetchTexFiles().then(() => {
+      void loadTexFileContent(selectedTexPath);
+      void fetchTexPreview();
+    });
+  }, [
+    activeTab,
+    fetchTexFiles,
+    fetchTexPreview,
+    loadTexFileContent,
+    selectedTexPath,
+  ]);
+
+  const paperMeta = useMemo(() => {
+    return papers
+      .map((paper) => {
+        const detail = paperDetails.get(paper.paper_id);
+        if (!detail) return null;
+        return {
+          paperId: paper.paper_id,
+          title: detail.title,
+          citeKey: makeCiteKey(paper.paper_id),
+          year: detail.year,
+          authors: detail.authors,
+        };
+      })
+      .filter((v): v is NonNullable<typeof v> => v !== null);
+  }, [papers, paperDetails]);
+
+  const linkedPaperIds = useMemo(() => {
+    const linked = new Set<string>();
+    const citeMatches = Array.from(
+      latexContent.matchAll(/\\cite\{([^}]*)\}/g),
+      (m) => m[1] || "",
+    );
+    const citeKeysInDoc = new Set(
+      citeMatches
+        .flatMap((chunk) => chunk.split(","))
+        .map((key) => key.trim())
+        .filter(Boolean),
+    );
+
+    for (const meta of paperMeta) {
+      if (
+        meta.title &&
+        latexContent.toLowerCase().includes(meta.title.toLowerCase())
+      ) {
+        linked.add(meta.paperId);
+        continue;
+      }
+      if (citeKeysInDoc.has(meta.citeKey)) {
+        linked.add(meta.paperId);
+      }
+    }
+    return linked;
+  }, [latexContent, paperMeta]);
+
+  const titleMentionMatches = useMemo(() => {
+    const matches: MentionMatch[] = [];
+    for (const meta of paperMeta) {
+      const title = meta.title?.trim();
+      if (!title || title.length < 3) continue;
+      const regex = new RegExp(escapeRegExp(title), "gi");
+      for (const match of latexContent.matchAll(regex)) {
+        const text = match[0];
+        const start = match.index ?? -1;
+        if (start < 0) continue;
+        matches.push({
+          start,
+          end: start + text.length,
+          paperId: meta.paperId,
+          label: title,
+        });
+      }
+    }
+    return matches.sort((a, b) => a.start - b.start);
+  }, [latexContent, paperMeta]);
+
+  const highlightedPreview = useMemo(() => {
+    if (titleMentionMatches.length === 0) {
+      return latexContent;
+    }
+
+    const nodes = [];
+    let cursor = 0;
+    for (const match of titleMentionMatches) {
+      if (match.start < cursor) continue;
+      if (cursor < match.start) {
+        nodes.push(latexContent.slice(cursor, match.start));
+      }
+      nodes.push(
+        <mark
+          key={`${match.paperId}-${match.start}`}
+          className="rounded bg-yellow-300/30 px-0.5 text-foreground"
+          title={`参照論文に紐づき: ${match.label}`}
+        >
+          {latexContent.slice(match.start, match.end)}
+        </mark>,
+      );
+      cursor = match.end;
+    }
+    if (cursor < latexContent.length) {
+      nodes.push(latexContent.slice(cursor));
+    }
+    return nodes;
+  }, [latexContent, titleMentionMatches]);
 
   if (loading) {
     return (
@@ -233,6 +615,7 @@ export default function ProjectDetailPage({
   }
 
   const tabs = [
+    { key: "latex" as Tab, label: "LaTeX", count: linkedPaperIds.size },
     { key: "papers" as Tab, label: "参照論文", count: papers.length },
     { key: "memos" as Tab, label: "メモ", count: null },
     { key: "export" as Tab, label: "BibTeX Export", count: null },
@@ -351,6 +734,219 @@ export default function ProjectDetailPage({
           >
             + 論文を追加
           </button>
+        </div>
+      )}
+
+      {/* タブコンテンツ: LaTeX */}
+      {activeTab === "latex" && (
+        <div
+          className={`grid gap-4 ${
+            filesCollapsed
+              ? "xl:grid-cols-[1fr_1fr]"
+              : "xl:grid-cols-[260px_1fr_1fr]"
+          }`}
+        >
+          {!filesCollapsed && (
+            <div className="glass-card rounded-xl p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="font-semibold">Files</h4>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => texFileInputRef.current?.click()}
+                    className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                  >
+                    + Upload
+                  </button>
+                  <button
+                    onClick={() => setFilesCollapsed(true)}
+                    className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    折りたたむ
+                  </button>
+                </div>
+                <input
+                  ref={texFileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleUploadTexFiles}
+                />
+              </div>
+              <div className="space-y-1 max-h-[560px] overflow-auto">
+                {texLoading && (
+                  <p className="text-xs text-muted-foreground">読み込み中...</p>
+                )}
+                {!texLoading &&
+                  texFiles.map((f) => (
+                    <div
+                      key={f.path}
+                      className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-xs ${
+                        selectedTexPath === f.path
+                          ? "bg-primary/15 text-primary"
+                          : "hover:bg-muted/40 text-muted-foreground"
+                      }`}
+                    >
+                      <button
+                        className="min-w-0 flex-1 text-left truncate"
+                        onClick={() => void handleSelectTexFile(f.path)}
+                      >
+                        {f.path}
+                      </button>
+                      <button
+                        className="opacity-0 group-hover:opacity-100 text-red-400"
+                        onClick={() => void handleDeleteTexFile(f.path)}
+                        title="削除"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          <div className="glass-card rounded-xl p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h4 className="font-semibold">LaTeX Editor ({selectedTexPath})</h4>
+              <div className="flex items-center gap-2">
+                {filesCollapsed && (
+                  <button
+                    onClick={() => setFilesCollapsed(false)}
+                    className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Filesを開く
+                  </button>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {lastSavedAt ? `保存: ${lastSavedAt}` : "未保存"}
+                </span>
+                <button
+                  onClick={() => void saveCurrentTexFile()}
+                  disabled={texSaving || !isTextTexFile(selectedTexPath)}
+                  className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-50"
+                >
+                  {texSaving ? "保存中..." : "保存"}
+                </button>
+                <button
+                  onClick={() => void handleCompileTex()}
+                  disabled={isCompiling}
+                  className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500 hover:text-emerald-950 transition-colors disabled:opacity-50"
+                >
+                  {isCompiling ? "Compiling..." : "Compile PDF"}
+                </button>
+              </div>
+            </div>
+            {isTextTexFile(selectedTexPath) ? (
+              <textarea
+                ref={latexEditorRef}
+                value={latexContent}
+                onChange={(e) => setLatexContent(e.target.value)}
+                spellCheck={false}
+                className="h-[560px] w-full resize-y rounded-lg border border-border bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                placeholder="ここにLaTeXを書いてください..."
+              />
+            ) : (
+              <div className="h-[560px] rounded-lg border border-border bg-muted/10 p-4 text-sm text-muted-foreground">
+                このファイル形式はエディタ表示対象外です。
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="glass-card rounded-xl p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="font-semibold">PDF Preview</h4>
+                <button
+                  onClick={() => void fetchTexPreview()}
+                  className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Refresh
+                </button>
+              </div>
+              {pdfPreviewUrl ? (
+                <iframe
+                  src={pdfPreviewUrl}
+                  className="h-[360px] w-full rounded-lg border border-border bg-background"
+                  title="TeX PDF Preview"
+                />
+              ) : (
+                <div className="h-[360px] flex items-center justify-center rounded-lg border border-border bg-muted/10 text-xs text-muted-foreground">
+                  まだPDFが生成されていません。Compile PDF を押してください。
+                </div>
+              )}
+              {compileLog && (
+                <pre className="mt-2 max-h-32 overflow-auto rounded bg-background p-2 text-[10px] text-muted-foreground">
+                  {compileLog}
+                </pre>
+              )}
+            </div>
+
+            <div className="glass-card rounded-xl p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="font-semibold">参照論文との紐づけ</h4>
+                <span className="text-xs text-muted-foreground">
+                  Linked {linkedPaperIds.size}/{papers.length}
+                </span>
+              </div>
+              <pre className="max-h-[180px] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-3 font-mono text-[11px] leading-5 text-muted-foreground">
+                {highlightedPreview}
+              </pre>
+              <div className="space-y-2 mt-3">
+                {paperMeta.map((meta) => {
+                  const isLinked = linkedPaperIds.has(meta.paperId);
+                  const firstMatch = titleMentionMatches.find(
+                    (m) => m.paperId === meta.paperId,
+                  );
+                  return (
+                    <div
+                      key={meta.paperId}
+                      className={`rounded-lg border p-2 text-xs ${
+                        isLinked
+                          ? "border-emerald-500/40 bg-emerald-500/10"
+                          : "border-border bg-muted/10"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          onClick={() => {
+                            if (firstMatch) {
+                              focusEditorRange(firstMatch.start, firstMatch.end);
+                            }
+                          }}
+                          className="truncate text-left hover:text-primary"
+                          title={
+                            firstMatch
+                              ? "エディタ内の該当箇所へ移動"
+                              : "本文中に未出現"
+                          }
+                        >
+                          {meta.title}
+                        </button>
+                        <div className="flex items-center gap-1">
+                          {firstMatch && (
+                            <button
+                              onClick={() =>
+                                focusEditorRange(firstMatch.start, firstMatch.end)
+                              }
+                              className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                            >
+                              jump
+                            </button>
+                          )}
+                          <button
+                            onClick={() => insertCitationAtCursor(meta.citeKey)}
+                            className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary hover:bg-primary hover:text-primary-foreground"
+                          >
+                            cite
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
