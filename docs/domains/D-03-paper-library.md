@@ -30,7 +30,6 @@
 papers/{paperId}
 {
   "id": "string",
-  "ownerUid": "string",
   "title": "string",
   "authors": ["string"],
   "year": "number",
@@ -84,7 +83,6 @@ class PaperCreate(BaseModel):
 
 class PaperResponse(BaseModel):
     id: str
-    owner_uid: str
     title: str
     authors: list[str]
     year: int | None
