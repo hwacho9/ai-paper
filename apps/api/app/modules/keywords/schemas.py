@@ -39,6 +39,7 @@ class PaperKeywordResponse(BaseModel):
     description: str = ""
     confidence: float
     source: str = "manual"
+    reason: str = ""
 
 
 class PaperKeywordListResponse(BaseModel):

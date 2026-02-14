@@ -104,6 +104,7 @@ class KeywordRepository:
         keyword_id: str,
         confidence: float,
         source: str = "manual",
+        reason: str = "",
     ) -> dict:
         """論文にキーワードを付与（同一keyword_idは上書き）"""
         now = datetime.now(timezone.utc)
@@ -112,6 +113,7 @@ class KeywordRepository:
             "keywordId": keyword_id,
             "confidence": confidence,
             "source": source,
+            "reason": reason,
             "createdAt": now,
             "updatedAt": now,
         }
@@ -208,4 +210,5 @@ class KeywordRepository:
             "description": description,
             "confidence": data.get("confidence", 1.0),
             "source": data.get("source", "manual"),
+            "reason": data.get("reason", ""),
         }

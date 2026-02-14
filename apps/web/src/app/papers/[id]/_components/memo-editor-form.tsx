@@ -42,19 +42,38 @@ export function MemoEditorForm({
 
       {/* 論文キーワード表示 */}
       <div className="mt-4 border-t border-border pt-3">
-        <label className="mb-2 block text-xs text-muted-foreground">
-          論文キーワード
-        </label>
         {keywordsLoading ? (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {[...Array(3)].map((_, i) => (
-              <span
-                key={i}
-                className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 animate-pulse"
-              >
-                <span className="h-3 w-10 rounded bg-primary/20" />
+          <div className="space-y-2.5">
+            <div>
+              <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                📄 論文キーワード
               </span>
-            ))}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[...Array(3)].map((_, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex rounded-full bg-primary/10 px-2.5 py-1 animate-pulse"
+                  >
+                    <span className="h-3 w-10 rounded bg-primary/20" />
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                📚 事前知識
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[...Array(2)].map((_, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex rounded-full bg-amber-400/10 px-2.5 py-1 animate-pulse"
+                  >
+                    <span className="h-3 w-10 rounded bg-amber-400/20" />
+                  </span>
+                ))}
+              </div>
+            </div>
             <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
               <svg
                 className="h-3 w-3 animate-spin"
@@ -72,15 +91,54 @@ export function MemoEditorForm({
             </span>
           </div>
         ) : keywords.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {keywords.map((kw) => (
-              <span
-                key={kw.keyword_id}
-                className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
-              >
-                {kw.label}
-              </span>
-            ))}
+          <div className="space-y-2.5">
+            {/* 論文キーワード */}
+            {(() => {
+              const paperKws = keywords.filter(
+                (kw) => kw.reason !== "llm_prerequisite_keyword",
+              );
+              return paperKws.length > 0 ? (
+                <div>
+                  <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    📄 論文キーワード
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {paperKws.map((kw) => (
+                      <span
+                        key={kw.keyword_id}
+                        className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                      >
+                        {kw.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            {/* 事前知識キーワード */}
+            {(() => {
+              const prereqKws = keywords.filter(
+                (kw) => kw.reason === "llm_prerequisite_keyword",
+              );
+              return prereqKws.length > 0 ? (
+                <div>
+                  <span className="mb-1 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                    📚 事前知識
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {prereqKws.map((kw) => (
+                      <span
+                        key={kw.keyword_id}
+                        className="rounded-full bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-300"
+                      >
+                        {kw.label}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground/60">

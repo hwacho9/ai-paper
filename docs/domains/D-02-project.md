@@ -101,7 +101,7 @@ class ProjectPaperAdd(BaseModel):
 
 - `ProjectCard` — プロジェクトカード（一覧用）
 - `ProjectCreateDialog` — 新規プロジェクト作成ダイアログ
-- `ProjectPapersList` — プロジェクト内の参照論文リスト
+- `ProjectPapersList` — プロジェクト内の参照論文リスト（クリックで論文詳細へ遷移）
 - `ProjectExportButton` — BibTeX exportボタン
 
 ## ポリシー（推奨）

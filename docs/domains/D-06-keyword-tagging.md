@@ -43,7 +43,8 @@ papers/{paperId}/keywords/{keywordId}
   "paperId": "string",
   "keywordId": "string",
   "confidence": 0.95,
-  "source": "manual" | "auto"
+  "source": "manual" | "auto",
+  "reason": "llm_paper_keyword" | "llm_prerequisite_keyword" | ""
 }
 ```
 
@@ -72,11 +73,14 @@ papers/{paperId}/keywords/{keywordId}
 
 ## 実装メモ（F-0603 暫定）
 
-- 現在の `POST /api/v1/papers/:id/keywords/suggest` は **モックのルールベース推薦** を実装している。
-- 推薦結果は `papers/{paperId}/keywords/{keywordId}` に `source="auto"` で保存される。
-- `manual` タグは保持し、`auto` タグのみ再計算時に置換する。
+- 現在の `POST /api/v1/papers/:id/keywords/suggest` は **LLMベースの自動推薦** を実装している（Gemini 1.5使用）。
+- 推薦結果は `papers/{paperId}/keywords/{keywordId}` に保存される。
+  - `source="auto"`: 自動生成されたタグ。
+  - `reason="llm_paper_keyword"`: その論文自体を表すキーワード。
+  - `reason="llm_prerequisite_keyword"`: その論文を読むために必要な事前知識キーワード。
+- フロントエンドでは `reason` に基づいて「📄 論文キーワード」「📚 事前知識」として分けて表示する。
+- `manual` タグは保持し、`auto` タグのみ再計算時に一括置換する。
 - ライブラリ追加（Like ON）時にも同じ推薦ロジックを呼び出し、自動タグ付けを行う。
-- D-05のVector Search I/O確定後に、推薦生成部を置換する（保存先/ACL方針は維持）。
 
 ## 実装メモ（ACL移行）
 

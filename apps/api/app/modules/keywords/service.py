@@ -193,6 +193,7 @@ class KeywordService:
                 keyword_id=keyword_id,
                 confidence=item.confidence,
                 source="auto",
+                reason=item.reason,
             )
             applied.append(
                 KeywordSuggestionItem(
