@@ -8,6 +8,8 @@ from app.core.firestore import get_firestore_client
 
 class KeywordRepository:
     COLLECTION = "keywords"
+    PAPERS_COLLECTION = "papers"
+    PAPER_KEYWORDS_SUBCOLLECTION = "keywords"
 
     def _get_db(self) -> AsyncClient:
         return get_firestore_client()
@@ -96,6 +98,48 @@ class KeywordRepository:
         await doc_ref.delete()
         return True
 
+    async def tag_paper_keyword(
+        self,
+        paper_id: str,
+        keyword_id: str,
+        confidence: float,
+        source: str = "manual",
+    ) -> dict:
+        """論文にキーワードを付与（同一keyword_idは上書き）"""
+        now = datetime.now(timezone.utc)
+        doc_data = {
+            "paperId": paper_id,
+            "keywordId": keyword_id,
+            "confidence": confidence,
+            "source": source,
+            "createdAt": now,
+            "updatedAt": now,
+        }
+        doc_ref = (
+            self._get_db()
+            .collection(self.PAPERS_COLLECTION)
+            .document(paper_id)
+            .collection(self.PAPER_KEYWORDS_SUBCOLLECTION)
+            .document(keyword_id)
+        )
+        await doc_ref.set(doc_data)
+        return self._paper_keyword_to_snake(doc_data)
+
+    async def untag_paper_keyword(self, paper_id: str, keyword_id: str) -> bool:
+        """論文からキーワードを解除"""
+        doc_ref = (
+            self._get_db()
+            .collection(self.PAPERS_COLLECTION)
+            .document(paper_id)
+            .collection(self.PAPER_KEYWORDS_SUBCOLLECTION)
+            .document(keyword_id)
+        )
+        doc = await doc_ref.get()
+        if not doc.exists:
+            return False
+        await doc_ref.delete()
+        return True
+
     def _to_snake(self, data: dict, keyword_id: str) -> dict:
         return {
             "id": keyword_id,
@@ -104,4 +148,12 @@ class KeywordRepository:
             "description": data.get("description", ""),
             "created_at": data.get("createdAt"),
             "updated_at": data.get("updatedAt"),
+        }
+
+    def _paper_keyword_to_snake(self, data: dict) -> dict:
+        return {
+            "paper_id": data.get("paperId"),
+            "keyword_id": data.get("keywordId"),
+            "confidence": data.get("confidence", 1.0),
+            "source": data.get("source", "manual"),
         }

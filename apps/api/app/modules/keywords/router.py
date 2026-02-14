@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.core.firebase_auth import get_current_user
 from app.modules.keywords.schemas import (
+    PaperKeywordResponse,
+    PaperKeywordTagCreate,
     KeywordCreate,
     KeywordListResponse,
     KeywordResponse,
@@ -52,19 +54,24 @@ async def delete_keyword(
 
 
 @router.post("/papers/{paper_id}/keywords")
-async def tag_paper(paper_id: str, current_user: dict = Depends(get_current_user)):
-    # TODO(F-0602): 論文にキーワードタグ付け
-    return {"paper_id": paper_id, "status": "not_implemented"}
+async def tag_paper(
+    paper_id: str,
+    body: PaperKeywordTagCreate,
+    current_user: dict = Depends(get_current_user),
+) -> PaperKeywordResponse:
+    """論文にキーワードタグ付け"""
+    return await keyword_service.tag_paper(paper_id, current_user["uid"], body)
 
 
-@router.delete("/papers/{paper_id}/keywords/{keyword_id}")
+@router.delete("/papers/{paper_id}/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def untag_paper(
     paper_id: str,
     keyword_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    # TODO(F-0602): 論文からキーワード解除
-    return {"paper_id": paper_id, "keyword_id": keyword_id, "status": "not_implemented"}
+    """論文からキーワード解除"""
+    await keyword_service.untag_paper(paper_id, keyword_id, current_user["uid"])
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/papers/{paper_id}/keywords/suggest")
