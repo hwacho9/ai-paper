@@ -194,7 +194,8 @@ export default function SearchPage() {
         limit: 20,
       });
       setResults(data.results);
-      if (resultMode === "organized") {
+      setResultMode("list");
+      if (data.results.length > 0) {
         await fetchOrganizedResults(trimmedQuery, searchSource);
       }
     } catch (err: unknown) {
@@ -210,10 +211,6 @@ export default function SearchPage() {
 
   const handleChangeResultMode = async (mode: ResultMode) => {
     setResultMode(mode);
-    if (mode !== "organized") return;
-    if (!hasSearched || !query.trim()) return;
-    if (organizedClusters.length > 0 || organizing) return;
-    await fetchOrganizedResults(query.trim(), searchSource);
   };
 
   const handleLike = async (paper: SearchResultItem) => {
@@ -422,34 +419,34 @@ export default function SearchPage() {
               </span>{" "}
               件の結果
             </p>
-            <div className="inline-flex rounded-lg border border-border bg-card/60 p-1">
+            {resultMode === "organized" && (
               <button
                 type="button"
                 onClick={() => void handleChangeResultMode("list")}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                  resultMode === "list"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-muted/60"
-                }`}
+                className="rounded-md border border-border bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted/60"
               >
-                List
+                Listへ戻る
               </button>
-              <button
-                type="button"
-                onClick={() => void handleChangeResultMode("organized")}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                  resultMode === "organized"
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-muted/60"
-                }`}
-              >
-                Organized
-              </button>
-            </div>
+            )}
           </div>
 
           {resultMode === "list" && (
             <div className="space-y-3">
+              {organizing && (
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs text-muted-foreground">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-muted-foreground/40 border-t-primary" />
+                  Organizing... Please wait.
+                </div>
+              )}
+              {!organizing && organizedClusters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleChangeResultMode("organized")}
+                  className="rounded-lg bg-primary/10 px-3 py-2 text-xs font-medium text-primary transition hover:bg-primary/20"
+                >
+                  Organized表示に切り替える
+                </button>
+              )}
               {results.map((paper) => (
                 <div
                   key={paper.external_id}
