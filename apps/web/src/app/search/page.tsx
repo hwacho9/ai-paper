@@ -14,10 +14,19 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-context";
 import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const SEARCH_HISTORY_KEY = "paper-search-history";
 const MAX_HISTORY_ITEMS = 10;
+const SEARCH_SOURCE_KEY = "paper-search-source";
+const SOURCE_OPTIONS = [
+  { value: "auto", label: "Auto（分野優先）" },
+  { value: "all", label: "All（統合）" },
+  { value: "arxiv", label: "ArXiv" },
+  { value: "pubmed", label: "PubMed" },
+  { value: "scholar", label: "Google Scholar" },
+] as const;
+
+type SearchSource = (typeof SOURCE_OPTIONS)[number]["value"];
 
 function formatCitations(count: number | null): string {
   if (!count) return "0";
@@ -52,6 +61,7 @@ export default function SearchPage() {
   const [error, setError] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [searchSource, setSearchSource] = useState<SearchSource>("auto");
   const [showSuggestions, setShowSuggestions] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -59,6 +69,15 @@ export default function SearchPage() {
   // 初期化時に検索履歴を読み込む
   useEffect(() => {
     setSearchHistory(loadSearchHistory());
+    const storedSource = localStorage.getItem(SEARCH_SOURCE_KEY);
+    if (
+      storedSource &&
+      (SOURCE_OPTIONS.map((option) => option.value) as readonly string[]).includes(
+        storedSource,
+      )
+    ) {
+      setSearchSource(storedSource as SearchSource);
+    }
   }, []);
 
   // クリックアウトでサジェストを非表示
@@ -107,7 +126,11 @@ export default function SearchPage() {
     setShowSuggestions(false);
 
     try {
-      const data = await searchPapers({ q: trimmedQuery, limit: 20 });
+      const data = await searchPapers({
+        q: trimmedQuery,
+        source: searchSource,
+        limit: 20,
+      });
       setResults(data.results);
     } catch (err: any) {
       // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -178,44 +201,72 @@ export default function SearchPage() {
           <span className="gradient-text">論文を検索</span>
         </h2>
         <p className="mt-2 text-muted-foreground">
-          Semantic Scholar から数千万件の論文を検索できます
+          ArXiv / PubMed / Scholar から分野別に最適化して検索します
         </p>
       </div>
 
       {/* 検索フォーム */}
       <form onSubmit={handleSearch} className="mx-auto max-w-2xl">
-        <div className="relative">
-          <svg
-            className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+        <div className="relative space-y-2">
+          <div className="rounded-xl border border-border bg-card px-3 py-2 flex items-stretch gap-3">
+            <svg
+              className="h-5 w-5 flex-shrink-0 text-muted-foreground"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+              />
+            </svg>
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setShowSuggestions(true)}
+              placeholder="キーワード、タイトル、著者名..."
+              className="min-w-0 flex-1 bg-transparent py-1.5 text-base outline-none"
             />
-          </svg>
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => setShowSuggestions(true)}
-            placeholder="キーワード、タイトル、著者名..."
-            className="w-full rounded-xl border border-border bg-card py-3.5 pl-12 pr-4 text-base outline-none
-              transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground
-              transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-          >
-            {loading ? "検索中..." : "検索"}
-          </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex h-10 min-w-[5rem] items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+            >
+              {loading ? "検索中..." : "検索"}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <label className="text-sm text-muted-foreground mr-2 self-center">
+              検索ソース
+            </label>
+            <div className="inline-flex rounded-lg border border-border bg-card/60 p-1">
+              {SOURCE_OPTIONS.map((option) => {
+                const selected = searchSource === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      const nextSource = option.value;
+                      setSearchSource(nextSource);
+                      localStorage.setItem(SEARCH_SOURCE_KEY, nextSource);
+                    }}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                      selected
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted/60"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* 検索履歴サジェスト */}
           {showSuggestions && filteredSuggestions.length > 0 && (
