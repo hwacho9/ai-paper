@@ -1,6 +1,10 @@
 """
 D-04: 論文検索 - サービス
 """
+import re
+import uuid
+import traceback
+
 from app.core.semantic_scholar import SemanticScholarClient
 from app.core.gemini import gemini_client
 from app.core.config import settings
@@ -11,8 +15,6 @@ from app.core.search import ArxivClient, PubmedClient, ScholarClient, SearchResu
 from app.core.gemini import gemini_client
 from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
 from fastapi import HTTPException
-import uuid
-import traceback
 
 class SearchService:
     def __init__(self):
@@ -86,9 +88,11 @@ class SearchService:
         
         # 1. Try to use external ID as ID
         if result.external_ids.get("ArXiv"):
-            paper_id = result.external_ids["ArXiv"]
+            arxiv_raw = str(result.external_ids["ArXiv"])
+            paper_id = f"arxiv:{self._sanitize_doc_id(arxiv_raw)}"
         elif result.external_ids.get("DOI"):
-            pass
+            doi_raw = str(result.external_ids["DOI"])
+            paper_id = f"doi:{self._sanitize_doc_id(doi_raw)}"
             
         if not paper_id:
             paper_id = str(uuid.uuid4())
@@ -110,5 +114,18 @@ class SearchService:
             citation_count=0,
             is_in_library=is_in_library
         )
+
+    def _sanitize_doc_id(self, value: str) -> str:
+        """
+        Firestore ドキュメントIDとして安全な文字に正規化する。
+        重要: '/' を含めない。
+        """
+        safe = value.strip()
+        safe = safe.replace("/", "_")
+        safe = safe.replace("\\", "_")
+        safe = re.sub(r"\s+", "_", safe)
+        safe = re.sub(r"[^a-zA-Z0-9._:-]", "_", safe)
+        safe = re.sub(r"_+", "_", safe)
+        return safe[:240] if safe else str(uuid.uuid4())
 
 search_service = SearchService()

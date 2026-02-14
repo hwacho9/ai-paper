@@ -143,5 +143,39 @@ Example:
             # Return empty on failure (non-blocking)
             return {"keywords": [], "prerequisite_keywords": []}
 
+    async def explain_paper(self, title: str, abstract: str, question: str) -> str | None:
+        """
+        論文タイトル/Abstractに基づいて日本語で説明を返す。
+        Vertex AI が使えない場合は None を返す。
+        """
+        if not self.model:
+            return None
+
+        prompt = f"""あなたは研究支援アシスタントです。
+以下の論文情報だけを根拠に、日本語でわかりやすく説明してください。
+不明な情報は推測せず「不明」と明示してください。
+
+ユーザー質問:
+{question}
+
+論文タイトル:
+{title}
+
+Abstract:
+{abstract if abstract else "(No abstract available)"}
+
+出力フォーマット:
+1) 要点（3点）
+2) 何が新しいか
+3) どんな人が先に読むべきか
+"""
+        try:
+            response = await self.model.generate_content_async(prompt)
+            text = (response.text or "").strip()
+            return text or None
+        except Exception as e:
+            logger.warning(f"Gemini Paper Explanation Error: {e}")
+            return None
+
 # Singleton
 gemini_client = GeminiClient()
