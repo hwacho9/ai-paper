@@ -6,7 +6,12 @@ from google.cloud import aiplatform, firestore
 from app.core.config import settings
 from app.core.embedding import generate_embedding
 from app.core.firestore import get_firestore_client
-from app.modules.related.schemas import RelatedPaper, Node, Edge, GraphData
+from app.modules.related.schemas import (
+    GraphData,
+    Node,
+    Edge,
+    RelatedPaper,
+)
 from app.modules.papers.repository import PaperRepository
 import logging
 import asyncio
