@@ -123,12 +123,19 @@ papers/{paperId}/chunks/{chunkId}
 ## TODO一覧
 
 ```python
-# TODO(F-0501): パイプライントリガー | AC: Pub/Subメッセージ受信→Job起動 | owner:@
-# TODO(F-0502): PDFパース | AC: テキスト+セクション抽出成功 | owner:@
-# TODO(F-0503): チャンク生成 | AC: セクション/ページ/オフセットメタ付きチャンク生成 | owner:@
-# TODO(F-0504): 埋め込み+インデックス | AC: Vertex Embedding生成+Vector Search登録 | owner:@
-# TODO(F-0505): 状態更新 | AC: INGESTING→READY/FAILED遷移 | owner:@
+# [x] (F-0501): パイプライントリガー | AC: Pub/Subメッセージ受信→Job起動 | Status: Done (Direct Trigger implemented)
+# [x] (F-0502): PDFパース | AC: テキスト+セクション抽出成功 | Status: Done
+# [x] (F-0503): チャンク生成 | AC: セクション/ページ/オフセットメタ付きチャンク生成 | Status: Done
+# [x] (F-0504): 埋め込み+インデックス | AC: Vertex Embedding生成+Vector Search登録 | Status: Done
+# [x] (F-0505): 状態更新 | AC: INGESTING→READY/FAILED遷移 | Status: Done
 ```
+
+## API (Backend)
+
+`POST /api/v1/papers/{paper_id}/upload`
+
+- `multipart/form-data`: `file` (PDF)
+- 処理: PDFをFirebase Storageに保存し、Ingestion Jobを起動する。
 
 ## Pub/Sub & Cloud Run Jobs 設定
 
