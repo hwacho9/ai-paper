@@ -44,6 +44,10 @@ class ProjectService:
             project["paper_count"] = len(seed_ids)
             await self._sync_project_references_bib(project["id"], owner_uid)
 
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+
         return project
 
     async def get_project(self, project_id: str, owner_uid: str) -> dict:
@@ -79,6 +83,10 @@ class ProjectService:
                 detail="プロジェクトが見つかりません。",
             )
 
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+
     async def add_paper(self, project_id: str, paper_id: str, owner_uid: str, note: str = "", role: str = "reference") -> dict:
         """参照論文追加"""
         # オーナー検証
@@ -93,6 +101,11 @@ class ProjectService:
             "note": note,
             "role": role,
         })
+        
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+        
         await self._sync_project_references_bib(project_id, owner_uid)
         return result
 
@@ -111,6 +124,10 @@ class ProjectService:
                 detail="論文が見つかりません。",
             )
         await self._sync_project_references_bib(project_id, owner_uid)
+
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
 
     async def get_project_papers(self, project_id: str, owner_uid: str) -> list[dict]:
         """プロジェクトの参照論文一覧"""

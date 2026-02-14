@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # Vertex AI
     vertex_location: str = "asia-northeast1"
     vector_index_id: str = ""
+    vector_index_endpoint_id: str = ""
 
     # CORS
     cors_allow_origins: str = "http://localhost:3000"
@@ -43,6 +44,9 @@ class Settings(BaseSettings):
 
     # PubMed API Key
     pubmed_api_key: str | None = None
+
+    # LLM Settings
+    google_model_name: str = "gemini-2.0-flash"
 
     @property
     def cors_allow_origins_list(self) -> list[str]:
