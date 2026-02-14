@@ -1,8 +1,7 @@
-"""
-D-02: プロジェクト（My Paper プロジェクト）- ルーター
-"""
+"""D-02: プロジェクト（My Paper プロジェクト）- ルーター"""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import Response
 
 from app.core.firebase_auth import get_current_user
 from app.modules.projects.schemas import (
@@ -12,6 +11,11 @@ from app.modules.projects.schemas import (
     ProjectResponse,
     ProjectListResponse,
     ProjectPaperResponse,
+    TexFileResponse,
+    TexFileContentResponse,
+    TexFileSaveRequest,
+    TexCompileRequest,
+    TexCompileResponse,
 )
 from app.modules.projects.service import project_service
 
@@ -97,3 +101,109 @@ async def list_project_papers(
 ):
     """プロジェクトの参照論文一覧"""
     return await project_service.get_project_papers(project_id, current_user["uid"])
+
+
+@router.get("/projects/{project_id}/tex/files", response_model=list[TexFileResponse])
+async def list_project_tex_files(
+    project_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """TeXワークスペースのファイル一覧"""
+    return await project_service.list_tex_files(project_id, current_user["uid"])
+
+
+@router.get("/projects/{project_id}/tex/file", response_model=TexFileContentResponse)
+async def get_project_tex_file(
+    project_id: str,
+    path: str = Query(..., min_length=1),
+    current_user: dict = Depends(get_current_user),
+):
+    """TeXテキストファイル内容取得"""
+    return await project_service.get_tex_file_content(
+        project_id, current_user["uid"], path
+    )
+
+
+@router.post("/projects/{project_id}/tex/file", status_code=204)
+async def save_project_tex_file(
+    project_id: str,
+    body: TexFileSaveRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """TeXテキストファイル保存"""
+    await project_service.save_tex_file_content(
+        project_id, current_user["uid"], body.path, body.content
+    )
+
+
+@router.delete("/projects/{project_id}/tex/file", status_code=204)
+async def delete_project_tex_file(
+    project_id: str,
+    path: str = Query(..., min_length=1),
+    current_user: dict = Depends(get_current_user),
+):
+    """TeXワークスペースのファイル削除"""
+    await project_service.delete_tex_file(project_id, current_user["uid"], path)
+
+
+@router.post("/projects/{project_id}/tex/upload", status_code=204)
+async def upload_project_tex_file(
+    project_id: str,
+    file: UploadFile = File(...),
+    path: str | None = Form(None),
+    current_user: dict = Depends(get_current_user),
+):
+    """TeXワークスペースにファイルアップロード"""
+    target_path = path or file.filename
+    if not target_path:
+        raise HTTPException(status_code=400, detail="file path is required")
+    content = await file.read()
+    await project_service.upload_tex_file(
+        project_id=project_id,
+        owner_uid=current_user["uid"],
+        path=target_path,
+        content=content,
+        content_type=file.content_type,
+    )
+
+
+@router.post("/projects/{project_id}/tex/compile", response_model=TexCompileResponse)
+async def compile_project_tex(
+    project_id: str,
+    body: TexCompileRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """TeXコンパイルしてPDFプレビューURLを返す"""
+    return await project_service.compile_tex(
+        project_id, current_user["uid"], body.main_file
+    )
+
+
+@router.get("/projects/{project_id}/tex/preview", response_model=TexCompileResponse)
+async def get_project_tex_preview(
+    project_id: str,
+    main_file: str = Query("main.tex"),
+    current_user: dict = Depends(get_current_user),
+):
+    """最新PDFプレビューURLを返す（未生成時はpdf_url=null）"""
+    preview = await project_service.get_tex_preview_url(
+        project_id, current_user["uid"], main_file
+    )
+    return {
+        "pdf_path": preview["pdf_path"],
+        "pdf_url": preview.get("pdf_url"),
+        "log": None,
+    }
+
+
+@router.get("/projects/{project_id}/tex/preview/pdf")
+async def get_project_tex_preview_pdf(
+    project_id: str,
+    main_file: str = Query("main.tex"),
+    current_user: dict = Depends(get_current_user),
+):
+    """最新PDFプレビュー本体を返す（Authorization必須）"""
+    content = await project_service.get_tex_preview_pdf(
+        project_id, current_user["uid"], main_file
+    )
+    return Response(content=content, media_type="application/pdf")
