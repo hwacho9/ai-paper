@@ -62,6 +62,11 @@ class KeywordRelatedService:
                     "title": data.get("title", "No Title"),
                     "authors": self._extract_authors(data.get("authors", [])),
                     "year": data.get("year"),
+                    "keyword_pairs": [
+                        (self._normalize_text(tag), tag)
+                        for tag in raw_keywords
+                        if self._normalize_text(tag)
+                    ],
                     "normalized_keywords": {
                         self._normalize_text(k)
                         for k in raw_keywords
@@ -83,7 +88,7 @@ class KeywordRelatedService:
             for candidate in candidates:
                 if candidate["paper_id"] in seen_paper_ids:
                     continue
-                score, reason = self._match_keyword_candidate(
+                score, reason, matched_tag = self._match_keyword_candidate(
                     keyword, normalized_keyword, candidate
                 )
                 if score <= 0:
@@ -94,6 +99,8 @@ class KeywordRelatedService:
                         "title": candidate["title"],
                         "authors": candidate["authors"],
                         "year": candidate["year"],
+                        "matched_tag": matched_tag,
+                        "candidate_tag": matched_tag if score == 0.7 else None,
                         "reason": reason,
                         "score": score,
                     }
@@ -182,17 +189,55 @@ class KeywordRelatedService:
         keyword: str,
         normalized_keyword: str,
         candidate: dict[str, Any],
-    ) -> tuple[float, str | None]:
-        if normalized_keyword in candidate["normalized_keywords"]:
-            return 1.0, f"{keyword}キーワード一致"
-        if any(
-            normalized_keyword in phrase or phrase in normalized_keyword
-            for phrase in candidate["normalized_keywords"]
-        ):
-            return 0.7, f"{keyword}概念近接"
+    ) -> tuple[float, str | None, str | None]:
+        keyword_pairs: list[tuple[str, str]] = candidate.get("keyword_pairs", [])
+
+        for normalized_tag, raw_tag in keyword_pairs:
+            if normalized_keyword == normalized_tag:
+                return 1.0, f"{keyword}キーワード一致", raw_tag
+
+        partial_match = self._best_partial_tag(normalized_keyword, keyword_pairs)
+        if partial_match:
+            return 0.7, f"{keyword}概念近接", partial_match
+
         if normalized_keyword in candidate["normalized_title"]:
-            return 0.6, f"{keyword}主題一致"
-        return 0.0, None
+            fallback_tag = self._best_overlap_tag(normalized_keyword, keyword_pairs)
+            return 0.6, f"{keyword}主題一致", fallback_tag
+        return 0.0, None, None
+
+    @staticmethod
+    def _best_partial_tag(
+        normalized_keyword: str,
+        keyword_pairs: list[tuple[str, str]],
+    ) -> str | None:
+        best_tag: str | None = None
+        best_score = -1
+        for normalized_tag, raw_tag in keyword_pairs:
+            if not (
+                normalized_keyword in normalized_tag
+                or normalized_tag in normalized_keyword
+            ):
+                continue
+            score = len(set(normalized_keyword.split()) & set(normalized_tag.split()))
+            if score > best_score:
+                best_score = score
+                best_tag = raw_tag
+        return best_tag
+
+    @staticmethod
+    def _best_overlap_tag(
+        normalized_keyword: str,
+        keyword_pairs: list[tuple[str, str]],
+    ) -> str | None:
+        best_tag: str | None = None
+        best_score = 0
+        keyword_tokens = set(normalized_keyword.split())
+        for normalized_tag, raw_tag in keyword_pairs:
+            overlap = len(keyword_tokens & set(normalized_tag.split()))
+            if overlap > best_score:
+                best_score = overlap
+                best_tag = raw_tag
+        return best_tag
 
     @staticmethod
     def _safe_year(value) -> int:

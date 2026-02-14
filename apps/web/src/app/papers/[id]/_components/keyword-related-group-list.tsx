@@ -31,15 +31,22 @@ export function KeywordRelatedGroupList({ groups }: KeywordRelatedGroupListProps
                                     <h4 className="font-medium leading-tight group-hover:text-primary transition-colors">
                                         {paper.title}
                                     </h4>
+                                    <div>
+                                        {paper.score === 1.0 && paper.matched_tag && (
+                                            <span className="inline-flex rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                                {paper.matched_tag}
+                                            </span>
+                                        )}
+                                        {paper.score === 0.7 && paper.candidate_tag && (
+                                            <span className="inline-flex rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary">
+                                                {paper.candidate_tag}
+                                            </span>
+                                        )}
+                                    </div>
                                     <p className="text-sm text-muted-foreground">
                                         {paper.authors.join(", ")}
                                         {paper.year && ` · ${paper.year}`}
                                     </p>
-                                    {paper.reason && (
-                                        <p className="text-xs text-muted-foreground/80">
-                                            {paper.reason}
-                                        </p>
-                                    )}
                                 </div>
                             </div>
                         </Link>

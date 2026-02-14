@@ -7,6 +7,8 @@ class KeywordRelatedItem(BaseModel):
     title: str
     authors: List[str]
     year: Optional[int] = None
+    matched_tag: Optional[str] = None
+    candidate_tag: Optional[str] = None
     reason: Optional[str] = None
     score: float = 0.0
 

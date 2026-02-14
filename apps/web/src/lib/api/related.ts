@@ -34,6 +34,8 @@ export interface KeywordRelatedItem {
     title: string;
     authors: string[];
     year?: number | null;
+    matched_tag?: string | null;
+    candidate_tag?: string | null;
     reason?: string | null;
     score: number;
 }
