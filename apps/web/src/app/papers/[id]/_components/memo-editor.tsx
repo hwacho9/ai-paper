@@ -1,4 +1,4 @@
-import type { MemoResponse } from "@/lib/api";
+import type { MemoResponse, PaperKeywordResponse } from "@/lib/api";
 import { MemoEditorForm } from "./memo-editor-form";
 import { MemoEditorHeader } from "./memo-editor-header";
 
@@ -8,11 +8,10 @@ interface MemoEditorProps {
   editing: boolean;
   title: string;
   body: string;
-  tags: string;
   saving: boolean;
+  keywords: PaperKeywordResponse[];
   onChangeTitle: (value: string) => void;
   onChangeBody: (value: string) => void;
-  onChangeTags: (value: string) => void;
   onSave: () => Promise<void>;
   onDelete: () => Promise<void>;
   onCreate: () => void;
@@ -24,11 +23,10 @@ export function MemoEditor({
   editing,
   title,
   body,
-  tags,
   saving,
+  keywords,
   onChangeTitle,
   onChangeBody,
-  onChangeTags,
   onSave,
   onDelete,
   onCreate,
@@ -88,11 +86,10 @@ export function MemoEditor({
           <MemoEditorForm
             title={title}
             body={body}
-            tags={tags}
             saving={saving}
+            keywords={keywords}
             onChangeTitle={onChangeTitle}
             onChangeBody={onChangeBody}
-            onChangeTags={onChangeTags}
             onSave={onSave}
           />
         </>

@@ -74,7 +74,6 @@ export default function MemosPage() {
   // エディタ
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
-  const [editTags, setEditTags] = useState("");
   const [saving, setSaving] = useState(false);
 
   const fetchMemos = useCallback(async () => {
@@ -119,13 +118,11 @@ export default function MemosPage() {
       setView({ mode: "editor", paper, existingMemo: existing });
       setEditTitle(existing.title);
       setEditBody(existing.body);
-      setEditTags(existing.tags.join(", "));
     } else {
       // 新規作成
       setView({ mode: "editor", paper, existingMemo: null });
       setEditTitle(`Note: ${paper.title}`);
       setEditBody(`## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n`);
-      setEditTags("");
     }
   };
 
@@ -146,7 +143,6 @@ export default function MemosPage() {
     setView({ mode: "editor", paper, existingMemo: memo });
     setEditTitle(memo.title);
     setEditBody(memo.body);
-    setEditTags(memo.tags.join(", "));
   };
 
   /* ---- 一覧へ戻る ---- */
@@ -159,10 +155,7 @@ export default function MemosPage() {
     if (!editTitle.trim() && !editBody.trim()) return;
     setSaving(true);
     try {
-      const tags = editTags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
+      const tags: string[] = [];
 
       if (view.mode === "editor" && view.existingMemo) {
         // 更新
@@ -210,9 +203,7 @@ export default function MemosPage() {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
-      m.title.toLowerCase().includes(q) ||
-      m.body.toLowerCase().includes(q) ||
-      m.tags.some((t) => t.toLowerCase().includes(q))
+      m.title.toLowerCase().includes(q) || m.body.toLowerCase().includes(q)
     );
   });
 
@@ -474,20 +465,6 @@ export default function MemosPage() {
             className="w-full bg-transparent text-sm outline-none resize-none leading-relaxed placeholder:text-muted-foreground/40 font-mono"
           />
 
-          {/* タグ */}
-          <div>
-            <label className="text-xs text-muted-foreground">
-              タグ（カンマ区切り）
-            </label>
-            <input
-              type="text"
-              value={editTags}
-              onChange={(e) => setEditTags(e.target.value)}
-              placeholder="transformer, survey, NLP"
-              className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-
           {/* アクション */}
           <div className="flex items-center justify-between pt-2 border-t border-border">
             <div>
@@ -653,23 +630,6 @@ export default function MemosPage() {
                   <p className="mt-1.5 text-xs text-muted-foreground line-clamp-3 leading-relaxed">
                     {memo.body || "(本文なし)"}
                   </p>
-                  {memo.tags.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {memo.tags.slice(0, 2).map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {memo.tags.length > 2 && (
-                        <span className="text-[9px] text-muted-foreground">
-                          +{memo.tags.length - 2}
-                        </span>
-                      )}
-                    </div>
-                  )}
                   <div className="mt-2 flex items-center justify-between">
                     {paperRef ? (
                       <span className="text-[9px] text-primary/60">

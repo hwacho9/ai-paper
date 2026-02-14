@@ -1,22 +1,22 @@
+import type { PaperKeywordResponse } from "@/lib/api";
+
 interface MemoEditorFormProps {
   title: string;
   body: string;
-  tags: string;
   saving: boolean;
+  keywords: PaperKeywordResponse[];
   onChangeTitle: (value: string) => void;
   onChangeBody: (value: string) => void;
-  onChangeTags: (value: string) => void;
   onSave: () => Promise<void>;
 }
 
 export function MemoEditorForm({
   title,
   body,
-  tags,
   saving,
+  keywords,
   onChangeTitle,
   onChangeBody,
-  onChangeTags,
   onSave,
 }: MemoEditorFormProps) {
   return (
@@ -38,18 +38,24 @@ export function MemoEditorForm({
         className="min-h-[300px] w-full flex-1 resize-none bg-transparent font-mono text-sm leading-relaxed outline-none placeholder:text-muted-foreground/40"
       />
 
-      <div className="mt-4">
-        <label className="mb-1 block text-xs text-muted-foreground">
-          タグ（カンマ区切り）
-        </label>
-        <input
-          type="text"
-          value={tags}
-          onChange={(e) => onChangeTags(e.target.value)}
-          placeholder="transformer, survey"
-          className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-        />
-      </div>
+      {/* 論文キーワード表示 */}
+      {keywords.length > 0 && (
+        <div className="mt-4 border-t border-border pt-3">
+          <label className="mb-2 block text-xs text-muted-foreground">
+            論文キーワード
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {keywords.map((kw) => (
+              <span
+                key={kw.keyword_id}
+                className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+              >
+                {kw.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 flex justify-end">
         <button

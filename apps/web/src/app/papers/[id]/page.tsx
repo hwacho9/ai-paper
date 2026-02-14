@@ -47,7 +47,6 @@ export default function PaperDetailPage({
   const [memosLoading, setMemosLoading] = useState(false);
   const [memoTitle, setMemoTitle] = useState("");
   const [memoBody, setMemoBody] = useState("");
-  const [memoTags, setMemoTags] = useState("");
   const [memoSaving, setMemoSaving] = useState(false);
   const [memoEditing, setMemoEditing] = useState(false);
 
@@ -81,7 +80,6 @@ export default function PaperDetailPage({
         setPaperMemo(related);
         setMemoTitle(related.title);
         setMemoBody(related.body);
-        setMemoTags(related.tags.join(", "));
       } else {
         setPaperMemo(null);
         setMemoEditing(false);
@@ -124,23 +122,16 @@ export default function PaperDetailPage({
     if (!memoTitle.trim() && !memoBody.trim()) return;
     setMemoSaving(true);
     try {
-      const tags = memoTags
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
-
       if (paperMemo) {
         await updateMemo(paperMemo.id, {
           title: memoTitle.trim(),
           body: memoBody.trim(),
-          tags,
         });
       } else {
         const refs: MemoRef[] = [{ ref_type: "paper", ref_id: id, note: null }];
         await createMemo({
           title: memoTitle.trim(),
           body: memoBody.trim(),
-          tags,
           refs,
         });
       }
@@ -164,7 +155,6 @@ export default function PaperDetailPage({
       setMemoEditing(false);
       setMemoTitle("");
       setMemoBody("");
-      setMemoTags("");
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "削除に失敗しました");
     }
@@ -265,17 +255,15 @@ export default function PaperDetailPage({
           editing={memoEditing}
           title={memoTitle}
           body={memoBody}
-          tags={memoTags}
           saving={memoSaving}
+          keywords={paperKeywords}
           onChangeTitle={setMemoTitle}
           onChangeBody={setMemoBody}
-          onChangeTags={setMemoTags}
           onSave={handleSaveMemo}
           onDelete={handleDeleteMemo}
           onCreate={() => {
             setMemoTitle(`Note: ${paper.title}`);
             setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
-            setMemoTags("");
             setMemoEditing(true);
           }}
         />
