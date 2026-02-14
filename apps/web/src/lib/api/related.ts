@@ -29,6 +29,8 @@ export interface GraphData {
     edges: Edge[];
 }
 
+export type GraphConnectionMode = "embedding" | "keyword" | "hybrid";
+
 export interface KeywordRelatedItem {
     paper_id: string;
     title: string;
@@ -71,8 +73,13 @@ export const relatedApi = {
         return apiGet<GraphData>(`/api/v1/projects/${projectId}/graph`);
     },
 
-    getGlobalGraph: async (): Promise<GraphData> => {
-        return apiGet<GraphData>("/api/v1/graph");
+    getGlobalGraph: async (
+        connectionMode?: GraphConnectionMode,
+    ): Promise<GraphData> => {
+        const qs = connectionMode
+            ? `?connection_mode=${encodeURIComponent(connectionMode)}`
+            : "";
+        return apiGet<GraphData>(`/api/v1/graph${qs}`);
     },
 
     getLibraryRelatedByKeywords: async (
