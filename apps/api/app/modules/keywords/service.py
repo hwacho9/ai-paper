@@ -84,13 +84,7 @@ class KeywordService:
         if not keyword:
             raise HTTPException(status_code=404, detail="keyword not found")
 
-        paper = await self.paper_repository.get_by_id(paper_id)
-        if not paper:
-            raise HTTPException(status_code=404, detail="paper not found")
-
-        liked_ids = await self.paper_repository.get_user_likes(owner_uid)
-        if paper_id not in liked_ids:
-            raise HTTPException(status_code=403, detail="paper is not in your library")
+        await self._ensure_paper_access(owner_uid, paper_id)
 
         confidence = data.confidence if data.confidence is not None else 1.0
         if confidence < 0 or confidence > 1:
@@ -106,13 +100,7 @@ class KeywordService:
 
     async def list_paper_keywords(self, paper_id: str, owner_uid: str) -> PaperKeywordListResponse:
         """論文のキーワード一覧を取得"""
-        paper = await self.paper_repository.get_by_id(paper_id)
-        if not paper:
-            raise HTTPException(status_code=404, detail="paper not found")
-
-        liked_ids = await self.paper_repository.get_user_likes(owner_uid)
-        if paper_id not in liked_ids:
-            raise HTTPException(status_code=403, detail="paper is not in your library")
+        await self._ensure_paper_access(owner_uid, paper_id)
 
         items = await self.repository.list_paper_keywords(paper_id, owner_uid)
         keywords = [PaperKeywordResponse(**item) for item in items]
@@ -124,6 +112,17 @@ class KeywordService:
         if not keyword:
             raise HTTPException(status_code=404, detail="keyword not found")
 
+        await self._ensure_paper_access(owner_uid, paper_id)
+
+        removed = await self.repository.untag_paper_keyword(paper_id, keyword_id)
+        if not removed:
+            raise HTTPException(status_code=404, detail="paper keyword not found")
+
+    async def _ensure_paper_access(self, owner_uid: str, paper_id: str) -> None:
+        """
+        論文アクセス検証。
+        現在はlikesベースの判定だが、ownerUid導入後にこの関数のみ置換する。
+        """
         paper = await self.paper_repository.get_by_id(paper_id)
         if not paper:
             raise HTTPException(status_code=404, detail="paper not found")
@@ -131,10 +130,6 @@ class KeywordService:
         liked_ids = await self.paper_repository.get_user_likes(owner_uid)
         if paper_id not in liked_ids:
             raise HTTPException(status_code=403, detail="paper is not in your library")
-
-        removed = await self.repository.untag_paper_keyword(paper_id, keyword_id)
-        if not removed:
-            raise HTTPException(status_code=404, detail="paper keyword not found")
 
     async def suggest(self, paper_id: str) -> list[dict]:
         # TODO(F-0603): LLM/埋め込みベースのキーワード推薦
