@@ -54,6 +54,7 @@ export function AgentChatWidget() {
   const [pendingActions, setPendingActions] = useState<AgentAction[]>([]);
   const [pendingPlan, setPendingPlan] = useState<string[]>([]);
   const [pendingByVerdict, setPendingByVerdict] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([
     {
@@ -108,6 +109,7 @@ export function AgentChatWidget() {
     setPendingActions([]);
     setPendingPlan([]);
     setPendingByVerdict(false);
+    setTemplatesOpen(true);
   };
 
   const executePendingTasks = async () => {
@@ -199,6 +201,7 @@ export function AgentChatWidget() {
     setPendingActions([]);
     setPendingPlan([]);
     setPendingByVerdict(false);
+    setTemplatesOpen(false);
     setPhase("planning");
     setLivePlan([]);
     setLiveActions([]);
@@ -283,9 +286,31 @@ export function AgentChatWidget() {
       <button
         aria-label="Open AI agent chat"
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-sky-400/40 bg-sky-500 text-white shadow-lg shadow-sky-900/30 transition hover:scale-105 hover:bg-sky-400"
+        className={`fixed bottom-5 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full border text-white transition-all duration-300 hover:scale-105 ${
+          open
+            ? "border-cyan-200/80 bg-gradient-to-br from-cyan-400 to-blue-500 shadow-[0_0_30px_rgba(34,211,238,0.6)]"
+            : "border-cyan-300/50 bg-gradient-to-br from-sky-500 to-indigo-500 shadow-[0_0_24px_rgba(56,189,248,0.45)] hover:shadow-[0_0_30px_rgba(56,189,248,0.7)]"
+        }`}
       >
-        AI
+        <span className="pointer-events-none absolute -inset-1 rounded-full border border-cyan-200/30" />
+        <span className="pointer-events-none absolute -inset-2 rounded-full bg-cyan-300/10 blur-md" />
+        <svg
+          className="relative h-7 w-7"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 3v2.5" />
+          <rect x="4.5" y="6.5" width="15" height="11" rx="3" />
+          <circle cx="9.5" cy="12" r="1" />
+          <circle cx="14.5" cy="12" r="1" />
+          <path d="M9 15h6" />
+          <path d="M12 17.5V21" />
+          <path d="M8.5 21h7" />
+        </svg>
       </button>
 
       <section
@@ -430,55 +455,64 @@ export function AgentChatWidget() {
 
           <form onSubmit={submit} className="border-t border-border p-3">
             <div className="mb-3 rounded-lg border border-border/70 bg-muted/20 p-2">
-              <p className="px-1 pb-1 text-sm font-semibold">
-                今日は何をお手伝いしましょうか？
-              </p>
-              <div className="space-y-0.5">
-                {promptTemplates.map((tpl, i) => (
-                  <button
-                    key={`tpl-${i}`}
-                    type="button"
-                    onClick={() => setInput(tpl.prompt)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground/90 hover:bg-muted"
-                  >
-                    <svg
-                      className="h-4 w-4 shrink-0 text-muted-foreground"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
+              <button
+                type="button"
+                onClick={() => setTemplatesOpen((v) => !v)}
+                className="flex w-full items-center justify-between px-1 pb-1 text-left text-sm font-semibold"
+              >
+                <span>今日は何をお手伝いしましょうか？</span>
+                <span className="text-xs text-muted-foreground">
+                  {templatesOpen ? "▲" : "▼"}
+                </span>
+              </button>
+              {templatesOpen && (
+                <div className="space-y-0.5">
+                  {promptTemplates.map((tpl, i) => (
+                    <button
+                      key={`tpl-${i}`}
+                      type="button"
+                      onClick={() => setInput(tpl.prompt)}
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-foreground/90 hover:bg-muted"
                     >
-                      {i === 0 && (
-                        <>
-                          <circle cx="11" cy="11" r="7" />
-                          <path d="M20 20l-3.5-3.5" />
-                        </>
-                      )}
-                      {i === 1 && (
-                        <>
-                          <path d="M4 7h10" />
-                          <path d="M4 12h7" />
-                          <path d="M4 17h5" />
-                          <path d="M17 8l3 3-3 3" />
-                        </>
-                      )}
-                      {i === 2 && (
-                        <>
-                          <rect x="3" y="5" width="14" height="14" rx="2" />
-                          <path d="M17 10h4v9h-9v-4" />
-                        </>
-                      )}
-                      {i === 3 && (
-                        <>
-                          <circle cx="12" cy="12" r="9" />
-                          <path d="M8.5 12.5l2.2 2.2 4.8-4.8" />
-                        </>
-                      )}
-                    </svg>
-                    <span>{tpl.label}</span>
-                  </button>
-                ))}
-              </div>
+                      <svg
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        {i === 0 && (
+                          <>
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="M20 20l-3.5-3.5" />
+                          </>
+                        )}
+                        {i === 1 && (
+                          <>
+                            <path d="M4 7h10" />
+                            <path d="M4 12h7" />
+                            <path d="M4 17h5" />
+                            <path d="M17 8l3 3-3 3" />
+                          </>
+                        )}
+                        {i === 2 && (
+                          <>
+                            <rect x="3" y="5" width="14" height="14" rx="2" />
+                            <path d="M17 10h4v9h-9v-4" />
+                          </>
+                        )}
+                        {i === 3 && (
+                          <>
+                            <circle cx="12" cy="12" r="9" />
+                            <path d="M8.5 12.5l2.2 2.2 4.8-4.8" />
+                          </>
+                        )}
+                      </svg>
+                      <span>{tpl.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {(pendingActions.length > 0 || pendingByVerdict) && (
               <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs">
