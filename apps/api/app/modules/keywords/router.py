@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.core.firebase_auth import get_current_user
 from app.modules.keywords.schemas import (
+    PaperKeywordListResponse,
     PaperKeywordResponse,
     PaperKeywordTagCreate,
     KeywordCreate,
@@ -61,6 +62,15 @@ async def tag_paper(
 ) -> PaperKeywordResponse:
     """論文にキーワードタグ付け"""
     return await keyword_service.tag_paper(paper_id, current_user["uid"], body)
+
+
+@router.get("/papers/{paper_id}/keywords", response_model=PaperKeywordListResponse)
+async def list_paper_keywords(
+    paper_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """論文のキーワード一覧"""
+    return await keyword_service.list_paper_keywords(paper_id, current_user["uid"])
 
 
 @router.delete("/papers/{paper_id}/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)

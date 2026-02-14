@@ -90,6 +90,7 @@
 | `GET`    | `/api/v1/keywords`                       | 一覧     |
 | `PATCH`  | `/api/v1/keywords/:id`                   | 更新     |
 | `DELETE` | `/api/v1/keywords/:id`                   | 削除     |
+| `GET`    | `/api/v1/papers/:id/keywords`            | タグ一覧 |
 | `POST`   | `/api/v1/papers/:id/keywords`            | タグ付け |
 | `DELETE` | `/api/v1/papers/:id/keywords/:keywordId` | タグ解除 |
 | `POST`   | `/api/v1/papers/:id/keywords/suggest`    | 自動推薦 |

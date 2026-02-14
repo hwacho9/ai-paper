@@ -140,6 +140,36 @@ class KeywordRepository:
         await doc_ref.delete()
         return True
 
+    async def list_paper_keywords(self, paper_id: str, owner_uid: str) -> list[dict]:
+        """論文に紐づくキーワード一覧を取得"""
+        keywords_ref = (
+            self._get_db()
+            .collection(self.PAPERS_COLLECTION)
+            .document(paper_id)
+            .collection(self.PAPER_KEYWORDS_SUBCOLLECTION)
+        )
+
+        results: list[dict] = []
+        async for doc in keywords_ref.stream():
+            data = doc.to_dict()
+            keyword_doc = (
+                await self._get_db().collection(self.COLLECTION).document(doc.id).get()
+            )
+            keyword_data = keyword_doc.to_dict() if keyword_doc.exists else {}
+
+            if keyword_data and keyword_data.get("ownerUid") != owner_uid:
+                continue
+
+            results.append(
+                self._paper_keyword_to_snake(
+                    data,
+                    label=keyword_data.get("label", ""),
+                    description=keyword_data.get("description", ""),
+                )
+            )
+
+        return results
+
     def _to_snake(self, data: dict, keyword_id: str) -> dict:
         return {
             "id": keyword_id,
@@ -150,10 +180,17 @@ class KeywordRepository:
             "updated_at": data.get("updatedAt"),
         }
 
-    def _paper_keyword_to_snake(self, data: dict) -> dict:
+    def _paper_keyword_to_snake(
+        self,
+        data: dict,
+        label: str = "",
+        description: str = "",
+    ) -> dict:
         return {
             "paper_id": data.get("paperId"),
             "keyword_id": data.get("keywordId"),
+            "label": label,
+            "description": description,
             "confidence": data.get("confidence", 1.0),
             "source": data.get("source", "manual"),
         }

@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from app.modules.keywords.repository import KeywordRepository
 from app.modules.papers.repository import PaperRepository
 from app.modules.keywords.schemas import (
+    PaperKeywordListResponse,
     PaperKeywordResponse,
     PaperKeywordTagCreate,
     KeywordCreate,
@@ -102,6 +103,20 @@ class KeywordService:
             source="manual",
         )
         return PaperKeywordResponse(**tagged)
+
+    async def list_paper_keywords(self, paper_id: str, owner_uid: str) -> PaperKeywordListResponse:
+        """論文のキーワード一覧を取得"""
+        paper = await self.paper_repository.get_by_id(paper_id)
+        if not paper:
+            raise HTTPException(status_code=404, detail="paper not found")
+
+        liked_ids = await self.paper_repository.get_user_likes(owner_uid)
+        if paper_id not in liked_ids:
+            raise HTTPException(status_code=403, detail="paper is not in your library")
+
+        items = await self.repository.list_paper_keywords(paper_id, owner_uid)
+        keywords = [PaperKeywordResponse(**item) for item in items]
+        return PaperKeywordListResponse(keywords=keywords, total=len(keywords))
 
     async def untag_paper(self, paper_id: str, keyword_id: str, owner_uid: str) -> None:
         """論文からキーワードを解除"""
