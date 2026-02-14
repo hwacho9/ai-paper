@@ -8,7 +8,15 @@
 
 import { useState, useEffect, useCallback, use, useMemo, useRef } from "react";
 import Link from "next/link";
+import { RotateCw } from "lucide-react";
 import { GraphView } from "./_components/graph-view";
+import {
+    getMemos,
+    createMemo,
+    updateMemo,
+    deleteMemo,
+    type MemoResponse,
+} from "@/lib/api";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 import { auth } from "@/lib/firebase";
 
@@ -131,6 +139,7 @@ export default function ProjectDetailPage({
         null,
     );
     const [compileLog, setCompileLog] = useState<string | null>(null);
+    const [logExpanded, setLogExpanded] = useState(false);
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
     const [docSearchQuery, setDocSearchQuery] = useState("");
     const [bibtexExpanded, setBibtexExpanded] = useState(false);
@@ -138,6 +147,13 @@ export default function ProjectDetailPage({
         "\\section{Introduction}\n\n",
     );
     const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+    const [projectMemos, setProjectMemos] = useState<MemoResponse[]>([]);
+    const [memosLoading, setMemosLoading] = useState(false);
+    const [memoSearchQuery, setMemoSearchQuery] = useState("");
+    const [memoTitle, setMemoTitle] = useState("");
+    const [memoBody, setMemoBody] = useState("");
+    const [memoSaving, setMemoSaving] = useState(false);
+    const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
     const latexEditorRef = useRef<HTMLTextAreaElement>(null);
     const texFileInputRef = useRef<HTMLInputElement>(null);
     const pdfObjectUrlRef = useRef<string | null>(null);
@@ -185,6 +201,88 @@ export default function ProjectDetailPage({
     useEffect(() => {
         fetchProject();
     }, [fetchProject]);
+
+    const fetchProjectMemos = useCallback(async () => {
+        setMemosLoading(true);
+        try {
+            const data = await getMemos();
+            const filtered = data.memos
+                .filter((memo) =>
+                    memo.refs.some(
+                        (ref) => ref.ref_type === "project" && ref.ref_id === id,
+                    ),
+                )
+                .sort((a, b) => {
+                    const at = a.updated_at || a.created_at || "";
+                    const bt = b.updated_at || b.created_at || "";
+                    return bt.localeCompare(at);
+                });
+            setProjectMemos(filtered);
+        } catch (e) {
+            console.error("Failed to load project memos", e);
+        } finally {
+            setMemosLoading(false);
+        }
+    }, [id]);
+
+    useEffect(() => {
+        fetchProjectMemos();
+    }, [fetchProjectMemos]);
+
+    const resetMemoEditor = useCallback(() => {
+        setEditingMemoId(null);
+        setMemoTitle("");
+        setMemoBody("");
+    }, []);
+
+    const openMemoEditor = (memo: MemoResponse) => {
+        setEditingMemoId(memo.id);
+        setMemoTitle(memo.title);
+        setMemoBody(memo.body);
+    };
+
+    const handleSaveMemo = async () => {
+        const title = memoTitle.trim();
+        const body = memoBody.trim();
+        if (!title && !body) return;
+        setMemoSaving(true);
+        try {
+            if (editingMemoId) {
+                const current = projectMemos.find((m) => m.id === editingMemoId);
+                await updateMemo(editingMemoId, {
+                    title,
+                    body,
+                    tags: current?.tags || [],
+                });
+            } else {
+                await createMemo({
+                    title,
+                    body,
+                    tags: [],
+                    refs: [{ ref_type: "project", ref_id: id, note: null }],
+                });
+            }
+            await fetchProjectMemos();
+            resetMemoEditor();
+        } catch (e: unknown) {
+            alert(e instanceof Error ? e.message : "メモの保存に失敗しました");
+        } finally {
+            setMemoSaving(false);
+        }
+    };
+
+    const handleDeleteMemo = async (memoId: string) => {
+        if (!confirm("このメモを削除しますか？")) return;
+        try {
+            await deleteMemo(memoId);
+            setProjectMemos((prev) => prev.filter((memo) => memo.id !== memoId));
+            if (editingMemoId === memoId) {
+                resetMemoEditor();
+            }
+        } catch (e: unknown) {
+            alert(e instanceof Error ? e.message : "メモの削除に失敗しました");
+        }
+    };
 
     const openAddDialog = async () => {
         setShowAddDialog(true);
@@ -690,8 +788,15 @@ export default function ProjectDetailPage({
     const tabs = [
         { key: "latex" as Tab, label: "LaTeX", count: linkedPaperIds.size },
         { key: "literature" as Tab, label: "プロジェクト内の文献", count: papers.length },
-        { key: "memos" as Tab, label: "メモ", count: null },
+        { key: "memos" as Tab, label: "メモ", count: projectMemos.length },
     ];
+    const filteredProjectMemos = projectMemos.filter((memo) => {
+        if (!memoSearchQuery.trim()) return true;
+        const q = memoSearchQuery.toLowerCase();
+        return (
+            memo.title.toLowerCase().includes(q) || memo.body.toLowerCase().includes(q)
+        );
+    });
 
     return (
         <div className="space-y-6">
@@ -968,28 +1073,47 @@ export default function ProjectDetailPage({
                         <div className="glass-card rounded-xl p-4">
                             <div className="mb-3 flex items-center justify-between">
                                 <h4 className="font-semibold">PDF Preview</h4>
-                                <button
-                                    onClick={() => void fetchTexPreview()}
-                                    className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
-                                    Refresh
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() =>
+                                            setLogExpanded((prev) => !prev)
+                                        }
+                                        className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+                                        {logExpanded ? "Log ▲" : "Log ▼"}
+                                    </button>
+                                    <button
+                                        onClick={() => void fetchTexPreview()}
+                                        className="rounded-md border border-border p-1.5 text-muted-foreground hover:text-foreground"
+                                        title="PDFを再読み込み"
+                                        aria-label="PDFを再読み込み">
+                                        <RotateCw className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                             {pdfPreviewUrl ? (
                                 <iframe
                                     src={pdfPreviewUrl}
-                                    className="h-[360px] w-full rounded-lg border border-border bg-background"
+                                    className="h-[520px] w-full rounded-lg border border-border bg-background"
                                     title="TeX PDF Preview"
                                 />
                             ) : (
-                                <div className="h-[360px] flex items-center justify-center rounded-lg border border-border bg-muted/10 text-xs text-muted-foreground">
+                                <div className="h-[520px] flex items-center justify-center rounded-lg border border-border bg-muted/10 text-xs text-muted-foreground">
                                     まだPDFが生成されていません。Compile PDF
                                     を押してください。
                                 </div>
                             )}
-                            {compileLog && (
-                                <pre className="mt-2 max-h-32 overflow-auto rounded bg-background p-2 text-[10px] text-muted-foreground">
-                                    {compileLog}
-                                </pre>
+                            {logExpanded && (
+                                <div className="mt-2">
+                                    {compileLog ? (
+                                        <pre className="max-h-36 overflow-auto rounded bg-background p-2 text-[10px] text-muted-foreground">
+                                            {compileLog}
+                                        </pre>
+                                    ) : (
+                                        <p className="rounded bg-background p-2 text-[11px] text-muted-foreground">
+                                            ログはまだありません。
+                                        </p>
+                                    )}
+                                </div>
                             )}
                         </div>
 
@@ -1159,9 +1283,116 @@ export default function ProjectDetailPage({
 
             {/* タブコンテンツ: メモ */}
             {activeTab === "memos" && (
-                <div className="text-center py-12 text-muted-foreground">
-                    <div className="text-4xl mb-3">✏️</div>
-                    <p>メモ機能は準備中です</p>
+                <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+                    <div className="glass-card rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-semibold">メモ一覧</h4>
+                            <button
+                                onClick={resetMemoEditor}
+                                className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                                新規メモ
+                            </button>
+                        </div>
+                        <div className="relative">
+                            <svg
+                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={1.5}
+                                stroke="currentColor">
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+                                />
+                            </svg>
+                            <input
+                                value={memoSearchQuery}
+                                onChange={(e) => setMemoSearchQuery(e.target.value)}
+                                placeholder="メモを検索..."
+                                className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:border-primary/40"
+                            />
+                        </div>
+                        <div className="max-h-[580px] space-y-2 overflow-y-auto pr-1">
+                            {memosLoading && (
+                                <p className="py-6 text-center text-sm text-muted-foreground">
+                                    読み込み中...
+                                </p>
+                            )}
+                            {!memosLoading && filteredProjectMemos.length === 0 && (
+                                <p className="py-6 text-center text-sm text-muted-foreground">
+                                    プロジェクトメモはまだありません
+                                </p>
+                            )}
+                            {!memosLoading &&
+                                filteredProjectMemos.map((memo) => {
+                                    const updatedAt = memo.updated_at || memo.created_at;
+                                    return (
+                                        <button
+                                            key={memo.id}
+                                            onClick={() => openMemoEditor(memo)}
+                                            className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                                                editingMemoId === memo.id
+                                                    ? "border-primary/40 bg-primary/5"
+                                                    : "border-border hover:border-primary/30"
+                                            }`}>
+                                            <p className="line-clamp-1 text-sm font-medium">
+                                                {memo.title || "無題のメモ"}
+                                            </p>
+                                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                                {memo.body || "(本文なし)"}
+                                            </p>
+                                            <p className="mt-2 text-[11px] text-muted-foreground">
+                                                {updatedAt
+                                                    ? new Date(updatedAt).toLocaleString("ja-JP")
+                                                    : ""}
+                                            </p>
+                                        </button>
+                                    );
+                                })}
+                        </div>
+                    </div>
+
+                    <div className="glass-card rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h4 className="font-semibold">
+                                {editingMemoId ? "メモを編集" : "新しいメモ"}
+                            </h4>
+                            {editingMemoId && (
+                                <button
+                                    onClick={() => handleDeleteMemo(editingMemoId)}
+                                    className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/20">
+                                    削除
+                                </button>
+                            )}
+                        </div>
+                        <input
+                            value={memoTitle}
+                            onChange={(e) => setMemoTitle(e.target.value)}
+                            placeholder="タイトル"
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/40"
+                        />
+                        <textarea
+                            value={memoBody}
+                            onChange={(e) => setMemoBody(e.target.value)}
+                            placeholder="このプロジェクトに関するメモを記録..."
+                            rows={16}
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/40"
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                            <button
+                                onClick={resetMemoEditor}
+                                className="rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+                                クリア
+                            </button>
+                            <button
+                                onClick={handleSaveMemo}
+                                disabled={memoSaving}
+                                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                                {memoSaving ? "保存中..." : "保存"}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
