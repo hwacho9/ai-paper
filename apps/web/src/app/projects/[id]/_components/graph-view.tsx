@@ -128,7 +128,9 @@ export function GraphView({
                     allowedNodeIds.has(edge.source) &&
                     allowedNodeIds.has(edge.target),
             );
-            const nodes = data.nodes.filter((node) => allowedNodeIds.has(node.id));
+            const nodes = data.nodes.filter((node) =>
+                allowedNodeIds.has(node.id),
+            );
 
             return { nodes, links };
         }
@@ -150,7 +152,10 @@ export function GraphView({
                 linkedNodeIds.add(nodeId);
             }
             for (const edge of data.edges) {
-                if (selectedWithFallback.has(edge.source) || selectedWithFallback.has(edge.target)) {
+                if (
+                    selectedWithFallback.has(edge.source) ||
+                    selectedWithFallback.has(edge.target)
+                ) {
                     linkedNodeIds.add(edge.source);
                     linkedNodeIds.add(edge.target);
                 }
@@ -253,7 +258,9 @@ export function GraphView({
                             </p>
                             <input
                                 value={projectQuery}
-                                onChange={(e) => setProjectQuery(e.target.value)}
+                                onChange={(e) =>
+                                    setProjectQuery(e.target.value)
+                                }
                                 placeholder="プロジェクト名"
                                 className="w-36 rounded-md border border-border/70 bg-muted/20 px-2 py-1 text-[11px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
@@ -270,11 +277,15 @@ export function GraphView({
                                     className="flex items-center gap-2 text-xs">
                                     <input
                                         type="checkbox"
-                                        checked={selectedProjects.includes(node.id)}
+                                        checked={selectedProjects.includes(
+                                            node.id,
+                                        )}
                                         onChange={() => toggleProject(node.id)}
                                         className="h-3 w-3"
                                     />
-                                    <span className="truncate">{node.label}</span>
+                                    <span className="truncate">
+                                        {node.label}
+                                    </span>
                                 </label>
                             ))}
                         </div>
@@ -292,12 +303,12 @@ export function GraphView({
                 nodeRelSize={10}
                 linkColor={() =>
                     isDark
-                        ? "rgba(148, 163, 184, 0.35)"
-                        : "rgba(30, 41, 59, 0.25)"
+                        ? "rgba(148, 163, 184, 0.6)"
+                        : "rgba(30, 41, 59, 0.5)"
                 }
-                linkWidth={(link: Edge) => {
+                linkWidth={(link: any) => {
                     const score = link.value || 1;
-                    return 0.8 + Math.max(0, Math.min(score, 3));
+                    return 1.5 + Math.max(0, Math.min(score, 3));
                 }}
                 onNodeClick={(node: any) => {
                     const nodeId = String(node.id);
@@ -310,36 +321,37 @@ export function GraphView({
                     if (onPaperSelect) onPaperSelect(nodeId);
                 }}
                 nodeCanvasObject={(node: any, ctx, globalScale) => {
-                    const isCenter = mode === "project" && node.id === projectId;
+                    const isCenter =
+                        mode === "project" && node.id === projectId;
                     const isProject = node.group === "project";
                     const isRelated = node.group === "related";
                     const radius = isCenter
                         ? 20 / globalScale
                         : isProject
-                            ? 11 / globalScale
-                            : 7 / globalScale;
+                          ? 11 / globalScale
+                          : 7 / globalScale;
 
                     const glow = isCenter
                         ? "rgba(250, 204, 21, 0.5)"
                         : isProject
-                            ? "rgba(129, 140, 248, 0.35)"
-                            : isRelated
-                              ? "rgba(16, 185, 129, 0.3)"
-                              : "rgba(96, 165, 250, 0.25)";
+                          ? "rgba(129, 140, 248, 0.35)"
+                          : isRelated
+                            ? "rgba(16, 185, 129, 0.3)"
+                            : "rgba(96, 165, 250, 0.25)";
 
                     const fill = isCenter
                         ? "#f59e0b"
                         : isProject
+                          ? isDark
+                              ? "#818cf8"
+                              : "#4f46e5"
+                          : isRelated
                             ? isDark
-                                ? "#818cf8"
-                                : "#4f46e5"
-                            : isRelated
-                                ? isDark
-                                    ? "#34d399"
-                                    : "#16a34a"
-                                : isDark
-                                  ? "#60a5fa"
-                                  : "#3b82f6";
+                                ? "#34d399"
+                                : "#16a34a"
+                            : isDark
+                              ? "#60a5fa"
+                              : "#3b82f6";
 
                     // Glow
                     ctx.beginPath();

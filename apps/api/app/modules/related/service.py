@@ -41,16 +41,26 @@ class RelatedService:
             return []
             
         paper_data = paper_doc.to_dict()
+        
+        # Construct rich query for better semantic matching
+        title = paper_data.get("title", "")
         abstract = paper_data.get("abstract", "")
-        if not abstract:
-             # Fallback to title?
-             abstract = paper_data.get("title", "")
+        keywords = paper_data.get("keywords", [])
+        
+        query_text = f"Title: {title}\n"
+        if keywords:
+            query_text += f"Keywords: {', '.join(keywords)}\n"
+        query_text += f"Abstract: {abstract}"
+        
+        if not query_text.strip():
+             limit = 0 # No query possible
+             return []
 
         # 2. Generate Embedding
         # In a real scenario, we should cache embeddings or retrieve stored ones.
         # But we don't store them in Firestore (only in Vector Search), so we regenerate query vector.
         # Cost optimization: Store embedding in specialized storage or Firestore (if size permits).
-        query_vector = generate_embedding(abstract)
+        query_vector = generate_embedding(query_text)
         if not query_vector:
             return []
 
@@ -170,6 +180,29 @@ class RelatedService:
             ))
             edges.append(Edge(source=project_id, target=doc.id, value=1.0))
             
+        # 3. Find relationships between papers in the project
+        # Limit to avoid too many requests if project is huge
+        if len(paper_ids) > 0:
+            target_ids = paper_ids[:20]  # Cap at 20 for now to be safe
+            related_tasks = []
+            for pid in target_ids:
+                related_tasks.append(self.get_related_papers(pid, limit=10))
+            
+            results = await asyncio.gather(*related_tasks)
+            
+            project_paper_set = set(paper_ids)
+            existing_edges = set() # Track to avoid duplicates (A-B and B-A)
+
+            for i, related_papers in enumerate(results):
+                source_id = target_ids[i]
+                for rp in related_papers:
+                    if rp.paperId in project_paper_set and rp.paperId != source_id:
+                        # Create a consistent key for undirected edge check
+                        edge_key = tuple(sorted((source_id, rp.paperId)))
+                        if edge_key not in existing_edges:
+                            edges.append(Edge(source=source_id, target=rp.paperId, value=rp.similarity))
+                            existing_edges.add(edge_key)
+
         return GraphData(nodes=nodes, edges=edges)
 
     async def get_global_graph(self, user_id: str) -> GraphData:
