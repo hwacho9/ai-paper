@@ -7,6 +7,7 @@ class SearchQuery(BaseModel):
     q: str = Field(..., description="検索キーワード")
     year_from: int | None = None
     year_to: int | None = None
+    author: str | None = None
     limit: int = 20
     offset: int = 0
 

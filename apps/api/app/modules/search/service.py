@@ -9,19 +9,33 @@ class SearchService:
     def __init__(self):
         self.gemini_client = gemini_client
 
-    async def search_papers(self, query: str, limit: int = 20, offset: int = 0) -> SearchResultListResponse:
+    async def search_papers(
+        self,
+        query: str,
+        year_from: int | None = None,
+        year_to: int | None = None,
+        author: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> SearchResultListResponse:
         """
-        Gemini検索結果を内部スキーマに正規化して返す。
+        Gemini検索結果を内部スキーマに正規化し、後段フィルターを適用して返す。
         """
         try:
-            raw_data = await self.gemini_client.search_papers(query, limit=limit)
-            items = []
-            for paper in raw_data.get("data", []):
-                items.append(self._normalize_paper(paper))
+            fetch_limit = min(max(limit + offset, limit), 100)
+            raw_data = await self.gemini_client.search_papers(query, limit=fetch_limit)
+            items = [self._normalize_paper(paper) for paper in raw_data.get("data", [])]
+            filtered_items = self._apply_filters(
+                items=items,
+                year_from=year_from,
+                year_to=year_to,
+                author=author,
+            )
+            paged_items = filtered_items[offset : offset + limit]
 
             return SearchResultListResponse(
-                results=items,
-                total=raw_data.get("total", 0),
+                results=paged_items,
+                total=len(filtered_items),
                 offset=offset,
                 limit=limit
             )
@@ -63,5 +77,31 @@ class SearchService:
             citation_count=paper.get("citationCount"),
             is_in_library=False 
         )
+
+    def _apply_filters(
+        self,
+        items: list[SearchResultItem],
+        year_from: int | None = None,
+        year_to: int | None = None,
+        author: str | None = None,
+    ) -> list[SearchResultItem]:
+        """取得済み検索結果に年度・著者フィルターを適用する。"""
+        filtered = items
+
+        if year_from is not None:
+            filtered = [item for item in filtered if item.year is not None and item.year >= year_from]
+
+        if year_to is not None:
+            filtered = [item for item in filtered if item.year is not None and item.year <= year_to]
+
+        if author and author.strip():
+            author_lc = author.strip().lower()
+            filtered = [
+                item
+                for item in filtered
+                if any(author_lc in author_name.lower() for author_name in item.authors)
+            ]
+
+        return filtered
 
 search_service = SearchService()

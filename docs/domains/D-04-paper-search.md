@@ -15,7 +15,7 @@ Geminiベースの論文検索を担当。結果を内部スキーマに正規�
 | 機能ID | 機能名             | 説明                                     |
 | ------ | ------------------ | ---------------------------------------- |
 | F-0401 | キーワード検索     | 外部APIへの検索クエリ送信                |
-| F-0402 | フィルター         | 年度/ジャーナル/著者によるフィルタリング |
+| F-0402 | フィルター         | 年度/著者によるフィルタリング            |
 | F-0403 | 検索結果からの保存 | My Paper Libraryへのインポート           |
 
 ## API仕様
@@ -25,6 +25,9 @@ Geminiベースの論文検索を担当。結果を内部スキーマに正規�
 - **認証**: 必須
 - **パラメータ**:
   - `q` (string, 必須): 検索キーワード
+  - `year_from` (int, 任意): 開始年
+  - `year_to` (int, 任意): 終了年
+  - `author` (string, 任意): 著者名（部分一致）
   - `limit` (int, 任意): 結果件数（デフォルト: 20、最大: 100）
   - `offset` (int, 任意): オフセット
 - **レスポンス**: `SearchResultListResponse`
@@ -36,6 +39,7 @@ class SearchQuery(BaseModel):
     q: str
     year_from: int | None = None
     year_to: int | None = None
+    author: str | None = None
     limit: int = 20
     offset: int = 0
 
@@ -71,7 +75,7 @@ class SearchResultListResponse(BaseModel):
 - `SearchBar` — 検索入力（キーワード + フィルター展開）
 - `SearchResults` — 検索結果リスト
 - `SearchResultCard` — 各結果のカード（いいねボタン付き）
-- `SearchFilters` — 詳細フィルター（年度/著者/ソース）
+- `SearchFilters` — 詳細フィルター（年度/著者）
 
 ## 実装ノート
 
@@ -83,6 +87,6 @@ class SearchResultListResponse(BaseModel):
 
 ```python
 # TODO(F-0401): キーワード検索 | AC: 外部API呼び出し+結果正規化 | owner:@
-# TODO(F-0402): フィルター | AC: 年度/著者/ソースによるフィルタリング | owner:@
+# TODO(F-0402): フィルター | AC: 年度/著者によるフィルタリング | owner:@
 # TODO(F-0403): 検索結果保存 | AC: 検索結果からPaperライブラリへのインポート | owner:@
 ```
