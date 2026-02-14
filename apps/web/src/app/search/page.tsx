@@ -467,7 +467,10 @@ export default function SearchPage() {
                   Organizing... Please wait.
                 </div>
               )}
-              {!organizing && showOrganizedSwitch && organizedClusters.length > 0 && (
+              {!organizing &&
+                !organizedFallbackUsed &&
+                showOrganizedSwitch &&
+                organizedClusters.length > 0 && (
                 <button
                   type="button"
                   onClick={() => void handleChangeResultMode("organized")}
@@ -475,7 +478,7 @@ export default function SearchPage() {
                 >
                   Organized表示に切り替える
                 </button>
-              )}
+                )}
               {results.map((paper) => (
                 <div
                   key={paper.external_id}
