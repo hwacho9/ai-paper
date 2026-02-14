@@ -24,6 +24,11 @@ import {
 } from "@/lib/api";
 import { MemoEditor } from "./_components/memo-editor";
 import { PaperHeader } from "./_components/paper-header";
+import { PaperBackLink } from "./_components/paper-back-link";
+import { PaperTabs } from "./_components/paper-tabs";
+import { OverviewPanel } from "./_components/overview-panel";
+import { PdfPanel } from "./_components/pdf-panel";
+import { RelatedPanel } from "./_components/related-panel";
 import type { Paper, Tab } from "./types";
 
 export default function PaperDetailPage({
@@ -229,34 +234,9 @@ export default function PaperDetailPage({
     );
   }
 
-  const tabs: Array<{ key: Tab; label: string }> = [
-    { key: "overview", label: "概要" },
-    { key: "pdf", label: "PDF" },
-    { key: "memos", label: "メモ" },
-    { key: "related", label: "関連論文" },
-  ];
-
   return (
     <div className="space-y-6">
-      <Link
-        href="/library"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
-      >
-        <svg
-          className="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          strokeWidth={1.5}
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15.75 19.5L8.25 12l7.5-7.5"
-          />
-        </svg>
-        ライブラリに戻る
-      </Link>
+      <PaperBackLink />
 
       <PaperHeader
         paper={paper}
@@ -267,82 +247,14 @@ export default function PaperDetailPage({
         onDeleteKeyword={handleDeleteKeyword}
       />
 
-      <div className="flex gap-1 rounded-xl bg-muted/30 p-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-              activeTab === tab.key
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <PaperTabs activeTab={activeTab} onChange={setActiveTab} />
 
       {activeTab === "overview" && (
-        <div className="glass-card rounded-xl p-6">
-          <h3 className="mb-3 text-lg font-semibold">Abstract</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {paper.abstract || "(Abstractなし)"}
-          </p>
-        </div>
+        <OverviewPanel abstract={paper.abstract} />
       )}
 
       {activeTab === "pdf" && (
-        <div className="glass-card overflow-hidden rounded-xl">
-          {paper.pdf_url ? (
-            <>
-              <div className="flex items-center justify-between border-b border-border bg-muted/20 px-4 py-2">
-                <span className="max-w-[60%] truncate text-xs text-muted-foreground">
-                  {paper.pdf_url}
-                </span>
-                <a
-                  href={paper.pdf_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
-                >
-                  <svg
-                    className="h-3.5 w-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                    />
-                  </svg>
-                  新しいタブで開く
-                </a>
-              </div>
-              <iframe
-                src={paper.pdf_url}
-                className="w-full border-0"
-                style={{ height: "80vh" }}
-                title={`${paper.title} - PDF`}
-              />
-            </>
-          ) : (
-            <div className="flex h-96 items-center justify-center p-6">
-              <div className="text-center">
-                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/30">
-                  <span className="text-2xl">📄</span>
-                </div>
-                <p className="text-sm font-medium">PDFが見つかりません</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  この論文にはPDF URLが登録されていません
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+        <PdfPanel title={paper.title} pdfUrl={paper.pdf_url} />
       )}
 
       {activeTab === "memos" && (
@@ -362,10 +274,7 @@ export default function PaperDetailPage({
       )}
 
       {activeTab === "related" && (
-        <div className="py-12 text-center text-muted-foreground">
-          <div className="mb-3 text-4xl">🔗</div>
-          <p>関連論文の分析機能は準備中です</p>
-        </div>
+        <RelatedPanel />
       )}
     </div>
   );
