@@ -12,7 +12,7 @@ class SearchQuery(BaseModel):
 
 class SearchResultItem(BaseModel):
     external_id: str
-    source: str = "semantic_scholar"
+    source: str = "gemini"
     title: str
     authors: list[str]
     year: int | None

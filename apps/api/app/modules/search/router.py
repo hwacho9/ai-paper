@@ -17,6 +17,6 @@ async def search_papers(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    外部論文DB（Semantic Scholar）を検索する。
+    Geminiベースで論文検索を実行する。
     """
     return await search_service.search_papers(query=q, limit=limit, offset=offset)

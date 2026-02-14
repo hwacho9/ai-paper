@@ -112,7 +112,7 @@ export default function SearchPage() {
                     <span className="gradient-text">論文を検索</span>
                 </h2>
                 <p className="mt-2 text-muted-foreground">
-                    Semantic Scholar から数千万件の論文を検索できます
+                    Geminiベースで関連論文を検索できます
                 </p>
             </div>
 

@@ -1,37 +1,23 @@
 """
 D-04: 論文検索 - サービス
 """
-from app.core.semantic_scholar import SemanticScholarClient
 from app.core.gemini import gemini_client
-from app.core.config import settings
 from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
 from fastapi import HTTPException
 
 class SearchService:
     def __init__(self):
-        # API Key is disabled per user request
-        self.api_client = SemanticScholarClient(api_key=None)
         self.gemini_client = gemini_client
 
     async def search_papers(self, query: str, limit: int = 20, offset: int = 0) -> SearchResultListResponse:
         """
-        論文を検索し、内部スキーマに正規化して返す。
-        Semantic Scholarが利用できない場合はGeminiでフォールバックする。
+        Gemini検索結果を内部スキーマに正規化して返す。
         """
-        source = "semantic_scholar"
-        raw_data = {}
-        
-        # Priority: Gemini -> Semantic Scholar (Fallback)
-        # As requested by user "make it work with Gemini"
-        
-        # 1. Try Gemini (Vertex AI)
         try:
             raw_data = await self.gemini_client.search_papers(query, limit=limit)
-            source = "gemini"
-            
             items = []
             for paper in raw_data.get("data", []):
-                items.append(self._normalize_paper(paper, source))
+                items.append(self._normalize_paper(paper))
 
             return SearchResultListResponse(
                 results=items,
@@ -43,7 +29,7 @@ class SearchService:
             print(f"Gemini API Error: {e}")
             raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")
 
-    def _normalize_paper(self, paper: dict, source: str) -> SearchResultItem:
+    def _normalize_paper(self, paper: dict) -> SearchResultItem:
         # Authors
         authors = [a.get("name") for a in paper.get("authors", []) if a.get("name")]
         
@@ -57,16 +43,15 @@ class SearchService:
         if not pdf_url and arxiv_id:
             pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
 
-        # Gemini returns dummy IDs, might want to generate UUIDs if saving?
-        # For now, we trust the source's ID or generate a temp one.
+        # Geminiの結果にpaperIdがない場合は暫定IDを採番
         paper_id = paper.get("paperId")
-        if not paper_id and source == "gemini":
+        if not paper_id:
             import uuid
             paper_id = f"gen-{uuid.uuid4()}"
 
         return SearchResultItem(
             external_id=paper_id,
-            source=source,
+            source="gemini",
             title=paper.get("title", "No Title"),
             authors=authors,
             year=paper.get("year"),

@@ -24,7 +24,7 @@
 ### バックエンド (FastAPI)
 
 - [x] **D-04 Search**: 論文検索プロキシAPI
-    - `GET /api/v1/search/papers` (Semantic Scholar)
+    - `GET /api/v1/search/papers` (Gemini)
 - [x] **D-03 Library**: 論文保存 & 取得
     - `POST /api/v1/library/{id}/like` (Toggle Like)
     - `GET /api/v1/library` (My Library)

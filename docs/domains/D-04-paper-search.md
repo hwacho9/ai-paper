@@ -2,11 +2,11 @@
 
 ## ドメイン概要
 
-外部論文データベース（arXiv、Semantic Scholar等）への検索プロキシを担当。結果を内部スキーマに正規化して返却する。
+Geminiベースの論文検索を担当。結果を内部スキーマに正規化して返却する。
 
 ## 責務境界
 
-- 外部ソースへのキーワード検索（arXiv / Crossref / Semantic Scholar から1〜2つ選択）
+- Geminiを用いたキーワード検索
 - 検索結果の正規化（内部Paperスキーマへのマッピング）
 - キャッシュ管理（同一クエリの短期TTLキャッシュ）
 
@@ -25,10 +25,6 @@
 - **認証**: 必須
 - **パラメータ**:
   - `q` (string, 必須): 検索キーワード
-  - `year_from` (int, 任意): 開始年
-  - `year_to` (int, 任意): 終了年
-  - `author` (string, 任意): 著者名
-  - `source` (string, 任意): "arxiv" | "semantic_scholar"（デフォルト: "semantic_scholar"）
   - `limit` (int, 任意): 結果件数（デフォルト: 20、最大: 100）
   - `offset` (int, 任意): オフセット
 - **レスポンス**: `SearchResultListResponse`
@@ -40,14 +36,12 @@ class SearchQuery(BaseModel):
     q: str
     year_from: int | None = None
     year_to: int | None = None
-    author: str | None = None
-    source: str = "semantic_scholar"
     limit: int = 20
     offset: int = 0
 
 class SearchResultItem(BaseModel):
     external_id: str           # 外部ソースのID
-    source: str                # "arxiv" | "semantic_scholar"
+    source: str                # "gemini"
     title: str
     authors: list[str]
     year: int | None
@@ -83,7 +77,7 @@ class SearchResultListResponse(BaseModel):
 
 - **キャッシュ**: 同一クエリは短期TTLキャッシュ（メモリ/Redis代替は後順位）
 - **速度**: 検索UXのためAPI応答は300〜800ms目標
-- **外部API**: 1次は Semantic Scholar API を使用（レート制限に注意）
+- **外部API**: Gemini APIを使用（レート制限に注意）
 
 ## TODO一覧
 
