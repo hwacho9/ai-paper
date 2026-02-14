@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppHeader } from "@/components/layout/app-header";
 import { AuthProvider } from "@/components/auth/auth-context";
+import { AgentChatWidget } from "@/components/agent/agent-chat-widget";
 
 const inter = Inter({
   variable: "--font-geist-sans",
@@ -34,6 +35,7 @@ export default function RootLayout({
               </main>
             </div>
           </div>
+          <AgentChatWidget />
         </AuthProvider>
       </body>
     </html>

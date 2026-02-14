@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.modules.auth.router import router as auth_router
+from app.modules.agent.router import router as agent_router
 from app.modules.papers.router import router as papers_router
 from app.modules.search.router import router as search_router
 from app.modules.memos.router import router as memos_router
@@ -48,6 +49,7 @@ async def healthz():
 
 # --- ルーターマウント ---
 app.include_router(auth_router, prefix="/api/v1", tags=["認証"])
+app.include_router(agent_router, prefix="/api/v1", tags=["Agent"])
 app.include_router(papers_router, prefix="/api/v1/library", tags=["ライブラリ"])
 app.include_router(search_router, prefix="/api/v1/search", tags=["検索"])
 app.include_router(memos_router, prefix="/api/v1/memos", tags=["メモ"])
