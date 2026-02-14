@@ -7,8 +7,8 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { relatedApi } from "@/lib/api/related";
+import { useRouter, useSearchParams } from "next/navigation";
+import { GraphConnectionMode, relatedApi } from "@/lib/api/related";
 
 // ノードデータ（内部用）
 interface GraphNode {
@@ -31,6 +31,7 @@ interface GraphEdge {
 
 export default function GraphPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     // State for Real Data
@@ -43,6 +44,13 @@ export default function GraphPage() {
     const [showMyPapers, setShowMyPapers] = useState(true);
     const [showRelated, setShowRelated] = useState(true);
     const [showProjects, setShowProjects] = useState(true);
+    const requestedMode = searchParams.get("mode");
+    const connectionMode: GraphConnectionMode =
+        requestedMode === "embedding" ||
+        requestedMode === "keyword" ||
+        requestedMode === "hybrid"
+            ? requestedMode
+            : "keyword";
 
     const nodesRef = useRef<GraphNode[]>([]); // Ref for animation loop
     const edgesRef = useRef<GraphEdge[]>([]); // Ref for animation loop
@@ -61,7 +69,7 @@ export default function GraphPage() {
         const loadGraph = async () => {
             setLoading(true);
             try {
-                const data = await relatedApi.getGlobalGraph();
+                const data = await relatedApi.getGlobalGraph(connectionMode);
                 console.log("Graph API Data:", data); // Debug
 
                 // Transform API nodes to GraphNodes with random initial positions
@@ -112,7 +120,7 @@ export default function GraphPage() {
             }
         };
         loadGraph();
-    }, []);
+    }, [connectionMode]);
 
     // 2. Filter Update
     useEffect(() => {

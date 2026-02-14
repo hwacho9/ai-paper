@@ -56,6 +56,7 @@
 | D-05 | 取り込みパイプライン | [D-05-ingestion-pipeline.md](./domains/D-05-ingestion-pipeline.md) |
 | D-06 | キーワード & タグ    | [D-06-keyword-tagging.md](./domains/D-06-keyword-tagging.md)       |
 | D-07 | 関連グラフ           | [D-07-related-graph.md](./domains/D-07-related-graph.md)           |
+| D-07+ | キーワードブリッジ開発計画 | [D-07-keyword-bridge-experiment.md](./domains/D-07-keyword-bridge-experiment.md) |
 | D-08 | メモ & ノート        | [D-08-memo-notes.md](./domains/D-08-memo-notes.md)                 |
 | D-09 | 読解サポート         | [D-09-reading-support.md](./domains/D-09-reading-support.md)       |
 | D-10 | TeX & BibTeX         | [D-10-tex-bibtex.md](./domains/D-10-tex-bibtex.md)                 |

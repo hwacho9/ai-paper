@@ -20,12 +20,16 @@ async def get_related_papers(
 
 @router.get("/graph", response_model=GraphData)
 async def get_global_graph(
+    connection_mode: str | None = None,
     current_user: dict = Depends(get_current_user),
 ):
     """
     Get global graph data (Projects, Papers, Related).
     """
-    return await related_service.get_global_graph(current_user["uid"])
+    return await related_service.get_global_graph(
+        current_user["uid"],
+        connection_mode=connection_mode,
+    )
 
 @router.get("/projects/{project_id}/graph", response_model=GraphData)
 async def get_project_graph(

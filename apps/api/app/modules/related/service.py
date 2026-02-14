@@ -30,6 +30,7 @@ class RelatedService:
         self.executor = ThreadPoolExecutor(max_workers=3)
         self.vector_fetch_k = 50
         self.rerank_top_k = 30
+        self.keyword_bridge_max_edges_per_node = 5
 
     def _ensure_initialized(self):
         """
@@ -287,6 +288,54 @@ class RelatedService:
 
         return ", ".join([p for p in parts if p])
 
+    @staticmethod
+    def _normalize_keyword_text(text: str) -> str:
+        if not isinstance(text, str):
+            return ""
+        normalized = re.sub(r"\([^)]*\)", " ", text)
+        normalized = normalized.replace("-", " ")
+        normalized = normalized.lower()
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized.strip()
+
+    def _extract_keyword_phrases(self, paper_data: dict) -> Set[str]:
+        phrases: Set[str] = set()
+        for field in ("keywords", "prerequisiteKeywords", "prerequisite_keywords"):
+            raw = paper_data.get(field, [])
+            if isinstance(raw, str):
+                normalized = self._normalize_keyword_text(raw)
+                if normalized:
+                    phrases.add(normalized)
+                continue
+
+            if not isinstance(raw, list):
+                continue
+
+            for item in raw:
+                value = None
+                if isinstance(item, str):
+                    value = item
+                elif isinstance(item, dict):
+                    for key in ("name", "label", "keyword", "term"):
+                        candidate = item.get(key)
+                        if isinstance(candidate, str):
+                            value = candidate
+                            break
+
+                if not value:
+                    continue
+                normalized = self._normalize_keyword_text(value)
+                if normalized:
+                    phrases.add(normalized)
+
+        return phrases
+
+    @staticmethod
+    def _keyword_bridge_score(overlap_count: int) -> float:
+        if overlap_count <= 0:
+            return 0.0
+        return min(0.9, 0.35 + 0.15 * overlap_count)
+
     def _query_vector_search(self, query_vector: list[float], limit: int):
         """Helper for running in executor"""
         try:
@@ -312,6 +361,114 @@ class RelatedService:
         except Exception as e:
             logger.error(f"Sync Vector search error: {e}")
             raise e
+
+    def _resolve_graph_connection_mode(self, mode: str | None) -> str:
+        configured = (mode or settings.graph_connection_mode or "keyword").strip().lower()
+        if configured not in {"embedding", "keyword", "hybrid"}:
+            return "keyword"
+        return configured
+
+    async def _add_embedding_bridge_edges(
+        self,
+        existing_paper_ids: list[str],
+        project_paper_ids: set[str],
+        edge_set: set[tuple[str, str]],
+        edges: list[Edge],
+    ) -> int:
+        owned_ids = [pid for pid in existing_paper_ids if pid not in project_paper_ids]
+        targets = owned_ids + random.sample(
+            list(project_paper_ids),
+            min(len(project_paper_ids), 5),
+        ) if project_paper_ids else owned_ids
+
+        if len(targets) > 15:
+            targets = random.sample(targets, 15)
+
+        existing_set = set(existing_paper_ids)
+        bridge_count = 0
+
+        for source_id in targets:
+            related_items = await self.get_related_papers(source_id, limit=5)
+            source_is_related = source_id in project_paper_ids
+
+            for related_item in related_items:
+                target_id = related_item.paperId
+                if target_id == source_id or target_id not in existing_set:
+                    continue
+                target_is_related = target_id in project_paper_ids
+
+                # Focus on connecting owned <-> related only
+                if source_is_related == target_is_related:
+                    continue
+
+                edge_key = tuple(sorted((source_id, target_id)))
+                if edge_key in edge_set:
+                    continue
+
+                edges.append(
+                    Edge(
+                        source=source_id,
+                        target=target_id,
+                        value=related_item.similarity,
+                    )
+                )
+                edge_set.add(edge_key)
+                bridge_count += 1
+
+        return bridge_count
+
+    def _add_keyword_bridge_edges(
+        self,
+        existing_paper_ids: list[str],
+        project_paper_ids: set[str],
+        paper_data_map: dict[str, dict],
+        edge_set: set[tuple[str, str]],
+        edges: list[Edge],
+    ) -> int:
+        phrase_map = {
+            pid: self._extract_keyword_phrases(data)
+            for pid, data in paper_data_map.items()
+        }
+
+        owned_ids = [pid for pid in existing_paper_ids if pid not in project_paper_ids]
+        related_ids = [pid for pid in existing_paper_ids if pid in project_paper_ids]
+
+        bridge_count = 0
+        for source_id in owned_ids:
+            source_phrases = phrase_map.get(source_id, set())
+            if not source_phrases:
+                continue
+
+            ranked_targets = []
+            for target_id in related_ids:
+                if source_id == target_id:
+                    continue
+                target_phrases = phrase_map.get(target_id, set())
+                if not target_phrases:
+                    continue
+                overlap_count = len(source_phrases & target_phrases)
+                if overlap_count <= 0:
+                    continue
+                ranked_targets.append((target_id, overlap_count))
+
+            ranked_targets.sort(key=lambda item: -item[1])
+            for target_id, overlap_count in ranked_targets[
+                : self.keyword_bridge_max_edges_per_node
+            ]:
+                edge_key = tuple(sorted((source_id, target_id)))
+                if edge_key in edge_set:
+                    continue
+                edges.append(
+                    Edge(
+                        source=source_id,
+                        target=target_id,
+                        value=self._keyword_bridge_score(overlap_count),
+                    )
+                )
+                edge_set.add(edge_key)
+                bridge_count += 1
+
+        return bridge_count
 
     async def get_project_graph(self, project_id: str) -> GraphData:
         """
@@ -368,44 +525,85 @@ class RelatedService:
             ))
             edges.append(Edge(source=project_id, target=doc.id, value=1.0))
 
-        # 3. Find relationships between papers in the project
-        # Limit to avoid too many requests if project is huge
-        if len(paper_ids) > 0:
-            target_ids = paper_ids[:20]  # Cap at 20 for now to be safe
-            related_tasks = []
-            for pid in target_ids:
-                related_tasks.append(self.get_related_papers(pid, limit=10))
+        # 3. Connect project papers by keyword overlap (embedding-free)
+        paper_data_map = {
+            doc.id: (doc.to_dict() or {})
+            for doc in paper_docs
+            if doc.exists
+        }
+        phrase_map = {
+            pid: self._extract_keyword_phrases(data)
+            for pid, data in paper_data_map.items()
+        }
+        edge_set = {tuple(sorted((edge.source, edge.target))) for edge in edges}
+        keyword_bridge_count = 0
 
-            results = await asyncio.gather(*related_tasks)
+        existing_ids = list(paper_data_map.keys())
+        for i in range(len(existing_ids)):
+            source_id = existing_ids[i]
+            source_phrases = phrase_map.get(source_id, set())
+            if not source_phrases:
+                continue
+            for j in range(i + 1, len(existing_ids)):
+                target_id = existing_ids[j]
+                target_phrases = phrase_map.get(target_id, set())
+                if not target_phrases:
+                    continue
+                overlap_count = len(source_phrases & target_phrases)
+                if overlap_count <= 0:
+                    continue
+                edge_key = tuple(sorted((source_id, target_id)))
+                if edge_key in edge_set:
+                    continue
+                edges.append(
+                    Edge(
+                        source=source_id,
+                        target=target_id,
+                        value=self._keyword_bridge_score(overlap_count),
+                    )
+                )
+                edge_set.add(edge_key)
+                keyword_bridge_count += 1
 
-            project_paper_set = set(paper_ids)
-            existing_edges = set()  # Track to avoid duplicates (A-B and B-A)
-
-            for i, related_papers in enumerate(results):
-                source_id = target_ids[i]
-                for rp in related_papers:
-                    if rp.paperId in project_paper_set and rp.paperId != source_id:
-                        # Create a consistent key for undirected edge check
-                        edge_key = tuple(sorted((source_id, rp.paperId)))
-                        if edge_key not in existing_edges:
-                            edges.append(Edge(source=source_id, target=rp.paperId, value=rp.similarity))
-                            existing_edges.add(edge_key)
+        logger.warning(
+            "project graph keyword edges added project=%s count=%s papers=%s",
+            project_id,
+            keyword_bridge_count,
+            len(existing_ids),
+        )
 
         return GraphData(nodes=nodes, edges=edges)
 
-    async def get_global_graph(self, user_id: str) -> GraphData:
+    async def get_global_graph(
+        self,
+        user_id: str,
+        connection_mode: str | None = None,
+    ) -> GraphData:
         """
         Construct a global graph for the user.
         Nodes: Projects, Papers
         Edges: Project -> Paper (and Paper -> Paper)
         """
         self._ensure_initialized()
+        resolved_mode = self._resolve_graph_connection_mode(connection_mode)
+        cache_doc_id = f"graph_global_{resolved_mode}"
+
         # 0. Check Cache
-        cache_ref = self.db.collection("users").document(user_id).collection("cache").document("graph_global")
+        cache_ref = (
+            self.db.collection("users")
+            .document(user_id)
+            .collection("cache")
+            .document(cache_doc_id)
+        )
         cache_doc = await cache_ref.get()
         if cache_doc.exists:
             data = cache_doc.to_dict()
-            logger.info(f"Graph cache hit for user {user_id}")
+            logger.info(
+                "Graph cache hit user=%s mode=%s doc=%s",
+                user_id,
+                resolved_mode,
+                cache_doc_id,
+            )
             # Reconstruct objects (Firestore stores dicts)
             return GraphData(
                 nodes=[Node(**n) for n in data.get("nodes", [])],
@@ -482,59 +680,48 @@ class RelatedService:
                     val=2 if group == "related" else 1
                 ))
 
-        # 4. Expand Related Papers & Inter-Library Connections
-        # "It must be related to My Library"
-        # We try to find connections for ALL visible papers to ensure density,
-        # but limit the *new* external nodes to avoid clutter.
+        # 4. Add bridge edges (embedding / keyword / hybrid)
+        paper_data_map = {
+            snap.id: (snap.to_dict() or {})
+            for snap in paper_snapshots
+            if snap.exists
+        }
+        embedding_count = 0
+        keyword_count = 0
 
-        # We want to check connections for a good number of papers
-        # especially orphaned ones to see if they relate to anything
-        orphaned_ids = [pid for pid in existing_paper_ids if pid not in project_paper_ids]
+        if resolved_mode in {"embedding", "hybrid"}:
+            embedding_count = await self._add_embedding_bridge_edges(
+                existing_paper_ids=existing_paper_ids,
+                project_paper_ids=project_paper_ids,
+                edge_set=edge_set,
+                edges=edges,
+            )
 
-        # Check allorphaned IDs + sample of project IDs
-        targets = orphaned_ids + random.sample(list(project_paper_ids), min(len(project_paper_ids), 5)) if project_paper_ids else orphaned_ids
+        if resolved_mode in {"keyword", "hybrid"}:
+            keyword_count = self._add_keyword_bridge_edges(
+                existing_paper_ids=existing_paper_ids,
+                project_paper_ids=project_paper_ids,
+                paper_data_map=paper_data_map,
+                edge_set=edge_set,
+                edges=edges,
+            )
 
-        # Safety cap on targets to prevent API timeout
-        if len(targets) > 10:
-            targets = random.sample(targets, 10)
-
-        for pid in targets:
-            # Limit to 3 related papers per target
-            related = await self.get_related_papers(pid, limit=3)
-            for r in related:
-                # Logic:
-                # 1. If related paper IS in our graph (Library or Project), DRAW EDGE! (Inter-library connection)
-                # 2. If related paper is NEW, add Node + Edge (External suggestion)
-
-                is_existing = r.paperId in unique_paper_ids
-                edge_key = tuple(sorted((pid, r.paperId)))
-
-                if is_existing:
-                    # Add edge between existing nodes (My Library / Project)
-                    if edge_key not in edge_set:
-                        edges.append(Edge(source=pid, target=r.paperId, value=r.similarity))
-                        edge_set.add(edge_key)
-                else:
-                    # It's a new external paper
-                    # Only add if we haven't already added it as a 'node' in this loop
-                    if not any(n.id == r.paperId for n in nodes):
-                        nodes.append(Node(
-                            id=r.paperId,
-                            label=r.title[:30] + "...",
-                            group="related",  # External related papers are also 'related'
-                            val=1
-                        ))
-
-                    if edge_key not in edge_set:
-                        edges.append(Edge(source=pid, target=r.paperId, value=r.similarity))
-                        edge_set.add(edge_key)
+        logger.warning(
+            "global graph bridges user=%s mode=%s embedding=%s keyword=%s papers=%s",
+            user_id,
+            resolved_mode,
+            embedding_count,
+            keyword_count,
+            len(existing_paper_ids),
+        )
 
         # 5. Save to Cache
         try:
             cache_data = {
                 "nodes": [n.model_dump() for n in nodes],
                 "edges": [e.model_dump() for e in edges],
-                "updatedAt": firestore.SERVER_TIMESTAMP
+                "updatedAt": firestore.SERVER_TIMESTAMP,
+                "connectionMode": resolved_mode,
             }
             await cache_ref.set(cache_data)
         except Exception as e:
@@ -546,9 +733,11 @@ class RelatedService:
         """Invalidate the global graph cache for a user."""
         self._ensure_initialized()
         try:
-            cache_ref = self.db.collection("users").document(user_id).collection("cache").document("graph_global")
-            await cache_ref.delete()
-            logger.info(f"Invalidated graph cache for user {user_id}")
+            cache_col = self.db.collection("users").document(user_id).collection("cache")
+            targets = ["graph_global", "graph_global_keyword", "graph_global_embedding", "graph_global_hybrid"]
+            for doc_id in targets:
+                await cache_col.document(doc_id).delete()
+            logger.info("Invalidated graph cache user=%s docs=%s", user_id, ",".join(targets))
         except Exception as e:
             logger.error(f"Failed to invalidate user graph cache: {e}")
 
