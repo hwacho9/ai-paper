@@ -113,7 +113,19 @@ class RelatedService:
     def _query_vector_search(self, query_vector: list[float], limit: int):
         """Helper for running in executor"""
         try:
-            my_index_endpoint = aiplatform.IndexEndpoint(index_endpoint_name=self.index_endpoint_name)
+            index_endpoint_cls = getattr(
+                aiplatform,
+                "MatchingEngineIndexEndpoint",
+                getattr(aiplatform, "IndexEndpoint", None),
+            )
+            if index_endpoint_cls is None:
+                raise AttributeError(
+                    "No matching index endpoint client found in aiplatform"
+                )
+
+            my_index_endpoint = index_endpoint_cls(
+                index_endpoint_name=self.index_endpoint_name
+            )
             response = my_index_endpoint.find_neighbors(
                 deployed_index_id="ai_paper_deployed_index",
                 queries=[query_vector],

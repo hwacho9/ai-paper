@@ -120,6 +120,42 @@
 | `POST`   | `/api/v1/papers/:id/explain`    | テキスト解釈   |
 | `POST`   | `/api/v1/papers/:id/highlights` | ハイライト保存 |
 | `GET`    | `/api/v1/papers/:id/highlights` | ハイライト一覧 |
+| `POST`   | `/api/v1/library/ask`           | ライブラリRAG検索 |
+
+### D-09: `/api/v1/library/ask` 仕様
+
+- リクエスト
+
+```json
+{
+  "question": "Transformer の主張を要約してください",
+  "paper_ids": ["paper-id-1", "paper-id-2"],
+  "top_k": 5
+}
+```
+
+- レスポンス
+
+```json
+{
+  "answer": "関連する根拠に基づいて要約した回答",
+  "confidence": 0.82,
+  "citations": [
+    {
+      "paper_id": "paper-id-1",
+      "chunk_id": "chunk-id-1",
+      "score": 0.91,
+      "page_range": [2],
+      "snippet": "..."
+    }
+  ]
+}
+```
+
+- 補足
+  - `paper_ids` を空配列または省略すると「ライブラリ内全論文」を対象にします。
+  - 指定した `paper_id` はユーザーのライブラリ所属を検証します。
+  - Vector Searchが利用不可の環境では、トークン一致ベースの簡易検索にフォールバックします。
 
 ### D-10: TeX/BibTeX
 

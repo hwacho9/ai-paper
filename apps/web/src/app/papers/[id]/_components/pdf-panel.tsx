@@ -1,9 +1,26 @@
 interface PdfPanelProps {
   title: string;
   pdfUrl: string | null;
+  page?: number;
 }
 
-export function PdfPanel({ title, pdfUrl }: PdfPanelProps) {
+export function PdfPanel({ title, pdfUrl, page = 1 }: PdfPanelProps) {
+  const clampPage = page > 0 ? Math.floor(page) : 1;
+  const withPageHash = (targetUrl: string) => {
+    if (clampPage <= 1) return targetUrl;
+
+    try {
+      const url = new URL(targetUrl);
+      url.hash = `page=${clampPage}`;
+      return url.toString();
+    } catch {
+      return `${targetUrl.split("#")[0]}#page=${clampPage}`;
+    }
+  };
+
+  const pdfViewUrl = pdfUrl ? withPageHash(pdfUrl) : "";
+  const downloadUrl = pdfUrl ? withPageHash(pdfUrl) : "#";
+
   if (!pdfUrl) {
     return (
       <div className="glass-card overflow-hidden rounded-xl">
@@ -29,7 +46,7 @@ export function PdfPanel({ title, pdfUrl }: PdfPanelProps) {
           {pdfUrl}
         </span>
         <a
-          href={pdfUrl}
+          href={downloadUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
@@ -51,7 +68,7 @@ export function PdfPanel({ title, pdfUrl }: PdfPanelProps) {
         </a>
       </div>
       <iframe
-        src={pdfUrl}
+        src={pdfViewUrl}
         className="w-full border-0"
         style={{ height: "80vh" }}
         title={`${title} - PDF`}
