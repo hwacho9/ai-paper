@@ -25,6 +25,7 @@ export interface KeywordListResponse {
 export interface PaperKeywordTagCreate {
   keyword_id: string;
   confidence?: number | null;
+  reason?: "llm_paper_keyword" | "llm_prerequisite_keyword" | string;
 }
 
 export interface PaperKeywordResponse {

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEventHandler } from "react";
 
 interface UseKeywordTagsEditorParams {
-  onAddKeyword: (label: string) => Promise<void>;
+  onAddKeyword: (label: string, reason?: string) => Promise<void>;
   onDeleteKeyword: (keywordId: string) => Promise<void>;
 }
 
@@ -62,13 +62,12 @@ export function useKeywordTagsEditor({
     setPrerequisiteKeywordDraft("");
   };
 
-  const submitKeyword = async (draft: string) => {
+  const submitKeyword = async (draft: string, reason?: string) => {
     const label = draft.trim();
-    if (!label || keywordSubmitting) return;
+    if (!label || keywordSubmitting) return false;
     setKeywordSubmitting(true);
     try {
-      await onAddKeyword(label);
-      // 自動的に閉じない（ユーザーがフォーカスを外したら閉じる）
+      await onAddKeyword(label, reason);
       return true;
     } finally {
       setKeywordSubmitting(false);
@@ -85,33 +84,56 @@ export function useKeywordTagsEditor({
     }
   };
 
-  const createKeyDownHandler =
-    (
-      draft: string,
-      setDraft: (value: string) => void,
-      closeInput: () => void,
-    ): KeyboardEventHandler<HTMLInputElement> =>
-    (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        void submitKeyword(draft).then((success) => {
+  // 論文キーワード用ハンドラー
+  const paperKeywordOnInputKeyDown: KeyboardEventHandler<HTMLInputElement> = (
+    e,
+  ) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void submitKeyword(paperKeywordDraft, "llm_paper_keyword").then(
+        (success) => {
           if (success) {
-            setDraft("");
+            setPaperKeywordDraft("");
           }
-        });
-      }
-      if (e.key === "Escape") {
-        closeInput();
-      }
-    };
+        },
+      );
+    }
+    if (e.key === "Escape") {
+      closePaperKeywordInput();
+    }
+  };
 
-  const createBlurHandler =
-    (draft: string, closeInput: () => void): (() => void) =>
-    () => {
-      if (!keywordSubmitting && !draft.trim()) {
-        closeInput();
-      }
-    };
+  const paperKeywordOnInputBlur = () => {
+    if (!keywordSubmitting && !paperKeywordDraft.trim()) {
+      closePaperKeywordInput();
+    }
+  };
+
+  // 事前知識キーワード用ハンドラー
+  const prerequisiteKeywordOnInputKeyDown: KeyboardEventHandler<
+    HTMLInputElement
+  > = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void submitKeyword(
+        prerequisiteKeywordDraft,
+        "llm_prerequisite_keyword",
+      ).then((success) => {
+        if (success) {
+          setPrerequisiteKeywordDraft("");
+        }
+      });
+    }
+    if (e.key === "Escape") {
+      closePrerequisiteKeywordInput();
+    }
+  };
+
+  const prerequisiteKeywordOnInputBlur = () => {
+    if (!keywordSubmitting && !prerequisiteKeywordDraft.trim()) {
+      closePrerequisiteKeywordInput();
+    }
+  };
 
   return {
     // 論文キーワード用
@@ -120,15 +142,9 @@ export function useKeywordTagsEditor({
     paperKeywordInputRef,
     setPaperKeywordDraft,
     openPaperKeywordInput,
-    paperKeywordOnInputKeyDown: createKeyDownHandler(
-      paperKeywordDraft,
-      setPaperKeywordDraft,
-      closePaperKeywordInput,
-    ),
-    paperKeywordOnInputBlur: createBlurHandler(
-      paperKeywordDraft,
-      closePaperKeywordInput,
-    ),
+    closePaperKeywordInput,
+    paperKeywordOnInputKeyDown,
+    paperKeywordOnInputBlur,
 
     // 事前知識キーワード用
     prerequisiteKeywordInputOpen,
@@ -136,15 +152,9 @@ export function useKeywordTagsEditor({
     prerequisiteKeywordInputRef,
     setPrerequisiteKeywordDraft,
     openPrerequisiteKeywordInput,
-    prerequisiteKeywordOnInputKeyDown: createKeyDownHandler(
-      prerequisiteKeywordDraft,
-      setPrerequisiteKeywordDraft,
-      closePrerequisiteKeywordInput,
-    ),
-    prerequisiteKeywordOnInputBlur: createBlurHandler(
-      prerequisiteKeywordDraft,
-      closePrerequisiteKeywordInput,
-    ),
+    closePrerequisiteKeywordInput,
+    prerequisiteKeywordOnInputKeyDown,
+    prerequisiteKeywordOnInputBlur,
 
     // 共通
     deleteMode,

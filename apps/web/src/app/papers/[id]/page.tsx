@@ -220,7 +220,7 @@ export default function PaperDetailPage({
     return created.id;
   };
 
-  const handleAddKeyword = async (label: string) => {
+  const handleAddKeyword = async (label: string, reason?: string) => {
     const normalized = label.trim();
     if (!normalized) return;
 
@@ -231,7 +231,10 @@ export default function PaperDetailPage({
 
     try {
       const keywordId = await resolveKeywordIdByLabel(normalized);
-      await tagPaperKeyword(id, { keyword_id: keywordId });
+      await tagPaperKeyword(id, {
+        keyword_id: keywordId,
+        reason: reason || "llm_paper_keyword",
+      });
       await fetchPaperKeywords();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "キーワード追加に失敗しました");

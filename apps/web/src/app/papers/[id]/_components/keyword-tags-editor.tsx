@@ -9,7 +9,7 @@ interface KeywordTagsEditorProps {
   keywords: PaperKeywordResponse[];
   loading: boolean;
   error: string | null;
-  onAddKeyword: (label: string) => Promise<void>;
+  onAddKeyword: (label: string, reason?: string) => Promise<void>;
   onDeleteKeyword: (keywordId: string) => Promise<void>;
 }
 

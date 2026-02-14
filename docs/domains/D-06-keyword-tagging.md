@@ -94,16 +94,18 @@ papers/{paperId}/keywords/{keywordId}
     - キーワードタグ表示（sky色: `border-sky-400/40 bg-sky-400/20 text-sky-200`）
     - 追加ボタン（+ アイコン）— フォーカスで入力フィールドに変化
       - `KeywordInputControl (type="paper")`
+      - Enter で `reason="llm_paper_keyword"` を指定して登録
   - 📚 **事前知識キーワード** セクション
     - キーワードタグ表示（amber色: `border-amber-400/40 bg-amber-400/20 text-amber-200`）
     - 追加ボタン（+ アイコン）— フォーカスで入力フィールドに変化
       - `KeywordInputControl (type="prerequisite")`
+      - Enter で `reason="llm_prerequisite_keyword"` を指定して登録
 
 **ユーザー操作フロー:**
 
 1. 論文詳細ページでキーワードセクションを表示
 2. 各キーワード型の + ボタンをクリック → 該当色の入力フィールドが出現
-3. テキスト入力 → Enter で登録、Escape でキャンセル
+3. テキスト入力 → Enter で登録（適切な reason を自動指定）、Escape でキャンセル
 4. 入力フィールド外フォーカス喪失 → 自動的に入力フォーム閉じる
 5. 削除モード有効時 → タグをクリックして削除
 
@@ -112,6 +114,12 @@ papers/{paperId}/keywords/{keywordId}
 - `reason` フィールドに基づいて自動分類（フロントエンド側）
   - `reason == "llm_prerequisite_keyword"` → 📚 事前知識セクションに表示
   - その他（`llm_paper_keyword` または空文字）→ 📄 論文キーワードセクションに表示
+
+**手動タグ付け時の reason 指定:**
+
+- UI側で reason を明示的に指定（論文キーワード用ハンドラー vs 事前知識キーワード用ハンドラー）
+- API側でも `reason` パラメータをサポート（`PaperKeywordTagCreate.reason`）
+- 指定がない場合のデフォルト: `"llm_paper_keyword"`
 
 ## 実装メモ（ACL移行）
 

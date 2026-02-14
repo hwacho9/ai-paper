@@ -96,11 +96,13 @@ class KeywordService:
         if confidence < 0 or confidence > 1:
             raise HTTPException(status_code=400, detail="confidence must be between 0 and 1")
 
+        reason = data.reason or "manual_tag"
         tagged = await self.repository.tag_paper_keyword(
             paper_id=paper_id,
             keyword_id=data.keyword_id,
             confidence=confidence,
             source="manual",
+            reason=reason,
         )
         return PaperKeywordResponse(**tagged)
 

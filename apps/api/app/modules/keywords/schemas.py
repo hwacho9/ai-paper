@@ -30,6 +30,7 @@ class KeywordListResponse(BaseModel):
 class PaperKeywordTagCreate(BaseModel):
     keyword_id: str
     confidence: float | None = None
+    reason: str | None = None
 
 
 class PaperKeywordResponse(BaseModel):
