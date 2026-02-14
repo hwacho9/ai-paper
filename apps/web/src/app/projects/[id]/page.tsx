@@ -92,6 +92,11 @@ function makeCiteKey(paperId: string): string {
     return key || "paper";
 }
 
+function withCacheBust(url: string): string {
+    const sep = url.includes("?") ? "&" : "?";
+    return `${url}${sep}t=${Date.now()}`;
+}
+
 export default function ProjectDetailPage({
     params,
 }: {
@@ -323,8 +328,8 @@ export default function ProjectDetailPage({
                 `/api/v1/projects/${id}/tex/compile`,
                 { main_file: "main.tex" },
             );
-            setPdfPreviewUrl(compiled.pdf_url);
             setCompileLog(compiled.log || null);
+            await fetchTexPreview();
         } catch (e: unknown) {
             setCompileLog(e instanceof Error ? e.message : "コンパイル失敗");
         } finally {
@@ -426,7 +431,7 @@ export default function ProjectDetailPage({
                 URL.revokeObjectURL(pdfObjectUrlRef.current);
                 pdfObjectUrlRef.current = null;
             }
-            setPdfPreviewUrl(data.pdf_url);
+            setPdfPreviewUrl(withCacheBust(data.pdf_url));
             return;
         }
 
