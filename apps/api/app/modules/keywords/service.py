@@ -1,10 +1,14 @@
 """D-06: キーワード - サービス"""
 
+import logging
+
 from fastapi import HTTPException
 
 from app.modules.keywords.repository import KeywordRepository
 from app.modules.papers.repository import PaperRepository
 from app.modules.keywords.schemas import (
+    KeywordSuggestionItem,
+    KeywordSuggestionResponse,
     PaperKeywordListResponse,
     PaperKeywordResponse,
     PaperKeywordTagCreate,
@@ -13,7 +17,9 @@ from app.modules.keywords.schemas import (
     KeywordResponse,
     KeywordUpdate,
 )
+from app.modules.keywords.suggester import suggest_keywords_mock
 
+logger = logging.getLogger(__name__)
 
 class KeywordService:
     def __init__(self):
@@ -132,8 +138,87 @@ class KeywordService:
             raise HTTPException(status_code=403, detail="paper is not in your library")
 
     async def suggest(self, paper_id: str) -> list[dict]:
-        # TODO(F-0603): LLM/埋め込みベースのキーワード推薦
-        return []
+        raise NotImplementedError
+
+    async def suggest_and_apply(
+        self,
+        paper_id: str,
+        owner_uid: str,
+    ) -> KeywordSuggestionResponse:
+        """
+        自動キーワード推薦（モック）を生成して論文へ反映する。
+        - manualタグは保持
+        - autoタグは再計算ごとに置換
+        """
+        await self._ensure_paper_access(owner_uid, paper_id)
+
+        paper = await self.paper_repository.get_by_id(paper_id)
+        if not paper:
+            raise HTTPException(status_code=404, detail="paper not found")
+
+        owner_keywords = await self.repository.list_by_owner(owner_uid)
+        owner_labels = [k.get("label", "") for k in owner_keywords if k.get("label")]
+
+        suggested = suggest_keywords_mock(
+            title=paper.get("title", ""),
+            abstract=paper.get("abstract", ""),
+            owner_keyword_labels=owner_labels,
+            limit=5,
+        )
+
+        # 既存manualタグは温存、autoタグは入れ替える
+        current = await self.repository.list_paper_keywords(paper_id, owner_uid)
+        manual_keyword_ids = {
+            item.get("keyword_id")
+            for item in current
+            if item.get("source") == "manual" and item.get("keyword_id")
+        }
+        await self.repository.delete_paper_keywords_by_source(paper_id, "auto")
+
+        applied: list[KeywordSuggestionItem] = []
+        for item in suggested:
+            keyword = await self.repository.get_by_label(owner_uid, item.label)
+            if not keyword:
+                keyword = await self.repository.create(
+                    owner_uid=owner_uid,
+                    data={"label": item.label, "description": ""},
+                )
+
+            keyword_id = keyword["id"]
+            if keyword_id in manual_keyword_ids:
+                continue
+
+            await self.repository.tag_paper_keyword(
+                paper_id=paper_id,
+                keyword_id=keyword_id,
+                confidence=item.confidence,
+                source="auto",
+            )
+            applied.append(
+                KeywordSuggestionItem(
+                    keyword_id=keyword_id,
+                    label=keyword["label"],
+                    confidence=item.confidence,
+                    source="auto",
+                    reason=item.reason,
+                )
+            )
+
+        return KeywordSuggestionResponse(
+            paper_id=paper_id,
+            suggestions=applied,
+            total=len(applied),
+        )
+
+    async def suggest_for_new_library_paper(self, paper_id: str, owner_uid: str) -> None:
+        """
+        ライブラリ新規追加時の自動推薦フック。
+        失敗しても主フロー（Like処理）は止めない。
+        """
+        try:
+            await self.suggest_and_apply(paper_id, owner_uid)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("auto keyword suggestion failed: %s", exc)
 
 
 keyword_service = KeywordService()

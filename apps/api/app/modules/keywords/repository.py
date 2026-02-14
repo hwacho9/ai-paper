@@ -140,6 +140,21 @@ class KeywordRepository:
         await doc_ref.delete()
         return True
 
+    async def delete_paper_keywords_by_source(self, paper_id: str, source: str) -> int:
+        """論文のキーワードをsourceで一括削除"""
+        keywords_ref = (
+            self._get_db()
+            .collection(self.PAPERS_COLLECTION)
+            .document(paper_id)
+            .collection(self.PAPER_KEYWORDS_SUBCOLLECTION)
+        )
+        query = keywords_ref.where("source", "==", source)
+        count = 0
+        async for doc in query.stream():
+            await doc.reference.delete()
+            count += 1
+        return count
+
     async def list_paper_keywords(self, paper_id: str, owner_uid: str) -> list[dict]:
         """論文に紐づくキーワード一覧を取得"""
         keywords_ref = (
