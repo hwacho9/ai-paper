@@ -6,7 +6,6 @@ from app.modules.papers.repository import PaperRepository
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
 
 from app.modules.memos.service import memo_service 
-from app.core.gemini import gemini_client
 from fastapi import UploadFile
 
 class PaperService:
