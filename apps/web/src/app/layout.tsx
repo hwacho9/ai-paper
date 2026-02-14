@@ -30,7 +30,7 @@ export default function RootLayout({
             <div className="flex flex-1 flex-col overflow-hidden">
               <AppHeader />
               <main className="flex-1 overflow-y-auto p-6">
-                <div className="animate-in mx-auto max-w-7xl">{children}</div>
+                <div className="animate-in mx-auto w-full max-w-none">{children}</div>
               </main>
             </div>
           </div>

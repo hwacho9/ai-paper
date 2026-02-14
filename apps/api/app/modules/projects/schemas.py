@@ -51,3 +51,35 @@ class ProjectPaperResponse(BaseModel):
     note: str = ""
     role: str = "reference"
     added_at: datetime | None = None
+
+
+class TexFileResponse(BaseModel):
+    """TeXワークスペース内ファイル情報"""
+    path: str
+    size: int | None = None
+    content_type: str | None = None
+    updated_at: datetime | None = None
+
+
+class TexFileContentResponse(BaseModel):
+    """テキストファイル内容"""
+    path: str
+    content: str
+
+
+class TexFileSaveRequest(BaseModel):
+    """テキストファイル保存"""
+    path: str
+    content: str
+
+
+class TexCompileRequest(BaseModel):
+    """TeXコンパイルリクエスト"""
+    main_file: str = "main.tex"
+
+
+class TexCompileResponse(BaseModel):
+    """TeXコンパイル結果"""
+    pdf_path: str
+    pdf_url: str | None = None
+    log: str | None = None
