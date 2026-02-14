@@ -15,6 +15,8 @@ export function KeywordTagsToolbar({
       <button
         type="button"
         onClick={onToggleDeleteMode}
+        aria-label={deleteMode ? "削除モードを終了" : "削除モードを開始"}
+        title={deleteMode ? "削除モードを終了" : "削除モードを開始"}
         className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors ${
           deleteMode
             ? "border-red-500/50 bg-red-500/15 text-red-300 hover:bg-red-500/25"
@@ -22,15 +24,9 @@ export function KeywordTagsToolbar({
         }`}
       >
         {deleteMode ? (
-          <>
-            <Check className="h-3.5 w-3.5" />
-            完了
-          </>
+          <Check className="h-3.5 w-3.5" />
         ) : (
-          <>
-            <Trash2 className="h-3.5 w-3.5" />
-            削除モード
-          </>
+          <Trash2 className="h-3.5 w-3.5" />
         )}
       </button>
     </div>
