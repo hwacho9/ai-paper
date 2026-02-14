@@ -164,7 +164,7 @@ export default function GraphPage() {
 
             const damping = 0.9;
             const repulsion = 4000;
-            const attraction = 0.008; // Increased slightly for connectivity
+            const attraction = 0.01; // 더 강한 연결력으로 밀집도/가독성 개선
             const centerGravity = 0.005;
 
             const cx = canvas.width / 2;
@@ -240,14 +240,29 @@ export default function GraphPage() {
 
                 const isHighlighted =
                     hoveredNode === source.id || hoveredNode === target.id;
+                const lineWeight = Math.max(
+                    0,
+                    Math.min(edge.strength ?? 0.5, 1),
+                );
                 ctx.beginPath();
                 ctx.moveTo(source.x, source.y);
                 ctx.lineTo(target.x, target.y);
                 ctx.strokeStyle = isHighlighted
-                    ? `rgba(130, 120, 255, ${0.4 + edge.strength * 0.5})`
-                    : `rgba(100, 100, 140, ${0.15 + edge.strength * 0.15})`;
-                ctx.lineWidth = isHighlighted ? 2 : 1;
+                    ? `rgba(180, 150, 255, ${Math.max(
+                        0.5,
+                        Math.min(0.9, 0.45 + lineWeight * 0.5),
+                    )})`
+                    : `rgba(120, 130, 190, ${Math.max(
+                        0.28,
+                        Math.min(0.75, 0.25 + lineWeight * 0.35),
+                    )})`;
+                ctx.lineWidth = isHighlighted ? 2.4 : 1.6 + lineWeight * 0.8;
+                ctx.shadowColor = isHighlighted
+                    ? "rgba(178, 136, 255, 0.5)"
+                    : "rgba(130, 130, 170, 0.25)";
+                ctx.shadowBlur = isHighlighted ? 5 : 2;
                 ctx.stroke();
+                ctx.shadowBlur = 0;
             }
 
             // ノード

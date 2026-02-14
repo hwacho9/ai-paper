@@ -301,14 +301,30 @@ export function GraphView({
                 backgroundColor={isDark ? "#0f172a" : "#f8fafc"}
                 nodeColor={() => "transparent"}
                 nodeRelSize={10}
-                linkColor={() =>
-                    isDark
-                        ? "rgba(148, 163, 184, 0.6)"
-                        : "rgba(30, 41, 59, 0.5)"
-                }
                 linkWidth={(link: any) => {
                     const score = link.value || 1;
-                    return 1.5 + Math.max(0, Math.min(score, 3));
+                    return 2 + Math.max(0, Math.min(score, 3)) * 1.5;
+                }}
+                linkDirectionalArrowLength={4}
+                linkDirectionalArrowRelPos={0.95}
+                linkDirectionalArrowColor={() =>
+                    isDark ? "rgba(226, 232, 240, 0.9)" : "#334155"
+                }
+                linkDirectionalParticles={1}
+                linkDirectionalParticleWidth={(link: any) => {
+                    const score = link.value || 1;
+                    return 1.5 + Math.max(0, Math.min(score, 3)) * 0.4;
+                }}
+                linkDirectionalParticleSpeed={0.005}
+                linkDirectionalParticleColor={() =>
+                    isDark ? "rgba(191, 219, 254, 0.9)" : "#1e40af"
+                }
+                linkColor={(link: any) => {
+                    const score = link.value || 1;
+                    const alpha = Math.min(0.95, 0.45 + Math.max(0, score) * 0.2);
+                    return isDark
+                        ? `rgba(148, 163, 184, ${alpha})`
+                        : `rgba(30, 41, 59, ${alpha})`;
                 }}
                 onNodeClick={(node: any) => {
                     const nodeId = String(node.id);
