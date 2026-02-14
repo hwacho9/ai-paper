@@ -16,17 +16,24 @@ class SemanticScholarClient:
         if self.api_key:
             self.headers["x-api-key"] = self.api_key
 
-    @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=1, min=2, max=5))
+    @retry(
+        stop=stop_after_attempt(4),  # 2 -> 4回に増やす
+        wait=wait_exponential(multiplier=1, min=2, max=10), # max 5 -> 10s
+        retry=retry_if_exception_type(httpx.HTTPStatusError) | retry_if_exception_type(httpx.TimeoutException)
+    )
     async def search_papers(
         self, 
         query: str, 
         offset: int = 0, 
         limit: int = 10,
-        fields: list[str] = ["paperId", "title", "authors", "year", "venue", "abstract", "externalIds", "citationCount", "openAccessPdf"]
+        fields: list[str] | None = None
     ) -> dict:
         """
         Search for papers by keyword.
         """
+        if fields is None:
+             fields = ["paperId", "title", "authors", "year", "venue", "abstract", "externalIds", "citationCount", "openAccessPdf"]
+
         async with httpx.AsyncClient() as client:
             params = {
                 "query": query,
@@ -34,14 +41,20 @@ class SemanticScholarClient:
                 "limit": limit,
                 "fields": ",".join(fields)
             }
-            response = await client.get(
-                f"{self.BASE_URL}/paper/search",
-                params=params,
-                headers=self.headers,
-                timeout=10.0
-            )
-            response.raise_for_status()
-            return response.json()
+            try:
+                response = await client.get(
+                    f"{self.BASE_URL}/paper/search",
+                    params=params,
+                    headers=self.headers,
+                    timeout=10.0
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.HTTPStatusError as e:
+                # 404 (Not Found) はリトライ不要
+                if e.response.status_code == 404:
+                    return {"data": [], "total": 0}
+                raise e
 
     async def get_paper(self, paper_id: str, fields: list[str] | None = None) -> dict:
         """
@@ -66,4 +79,4 @@ class SemanticScholarClient:
 from app.core.config import settings
 
 # Singleton instance
-semantic_scholar = SemanticScholarClient(api_key=settings.semantic_scholar_api_key)
+semantic_scholar = SemanticScholarClient(api_key=None)
