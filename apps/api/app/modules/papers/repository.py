@@ -44,12 +44,27 @@ class PaperRepository:
             "arxivId": data.get("arxiv_id"),
             "pdfUrl": data.get("pdf_url"),
             "status": "PENDING",
+            "keywords": data.get("keywords", []),
+            "prerequisiteKeywords": data.get("prerequisite_keywords", []),
             "createdAt": now,
             "updatedAt": now,
         }
         
         await doc_ref.set(doc_data)
         return self._to_snake(doc_data, paper_id)
+
+    async def update(self, paper_id: str, update_data: dict) -> dict | None:
+        """論文のフィールドを部分更新する"""
+        doc_ref = self._get_db().collection(self.COLLECTION_PAPERS).document(paper_id)
+        doc = await doc_ref.get()
+        if not doc.exists:
+            return None
+        
+        update_data["updatedAt"] = datetime.now(timezone.utc)
+        await doc_ref.update(update_data)
+        
+        updated_doc = await doc_ref.get()
+        return self._to_snake(updated_doc.to_dict(), paper_id)
 
     async def add_like(self, uid: str, paper_id: str):
         """ユーザーのいいねを追加"""
@@ -101,6 +116,8 @@ class PaperRepository:
             "arxiv_id": data.get("arxivId"),
             "pdf_url": data.get("pdfUrl"),
             "status": data.get("status", "PENDING"),
+            "keywords": data.get("keywords", []),
+            "prerequisite_keywords": data.get("prerequisiteKeywords", []),
             "created_at": data.get("createdAt"),
             "updated_at": data.get("updatedAt"),
         }
