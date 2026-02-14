@@ -1,9 +1,13 @@
-"""D-06: モック自動キーワード推薦（ルールベース）"""
+"""D-06: LLMベースの自動キーワード推薦"""
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -12,6 +16,59 @@ class SuggestedKeyword:
     confidence: float
     reason: str
 
+
+# ── Gemini (Vertex AI) によるLLM推薦 ──────────────────────────
+
+async def suggest_keywords_llm(
+    title: str,
+    abstract: str,
+    owner_keyword_labels: list[str],
+    limit: int = 8,
+) -> list[SuggestedKeyword]:
+    """
+    Gemini LLMで論文キーワード + 事前知識キーワードを英語で生成し、
+    SuggestedKeyword のリストとして返す。
+
+    既存ユーザーキーワードにマッチするものは confidence を高くする。
+    """
+    try:
+        from app.core.gemini import gemini_client
+
+        result = await gemini_client.generate_paper_keywords(title, abstract)
+        keywords = result.get("keywords", [])
+        prerequisite_keywords = result.get("prerequisite_keywords", [])
+
+        suggestions: list[SuggestedKeyword] = []
+        owner_labels_lower = {lbl.lower() for lbl in owner_keyword_labels}
+
+        # 論文キーワード
+        for kw in keywords:
+            label = kw.strip()
+            if not label:
+                continue
+            conf = 0.95 if label.lower() in owner_labels_lower else 0.85
+            suggestions.append(
+                SuggestedKeyword(label=label, confidence=conf, reason="llm_paper_keyword")
+            )
+
+        # 事前知識キーワード
+        for kw in prerequisite_keywords:
+            label = kw.strip()
+            if not label:
+                continue
+            conf = 0.90 if label.lower() in owner_labels_lower else 0.75
+            suggestions.append(
+                SuggestedKeyword(label=label, confidence=conf, reason="llm_prerequisite_keyword")
+            )
+
+        return suggestions[:limit * 2]  # keywords + prerequisite で多めに返す
+
+    except Exception as exc:
+        logger.warning("LLM keyword suggestion failed, falling back to rule-based: %s", exc)
+        return suggest_keywords_mock(title, abstract, owner_keyword_labels, limit)
+
+
+# ── フォールバック: ルールベースのモック推薦 ────────────────────
 
 DEFAULT_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("Transformer", ("transformer", "attention", "bert", "gpt")),
@@ -32,7 +89,7 @@ def suggest_keywords_mock(
 ) -> list[SuggestedKeyword]:
     """
     論文タイトル/要旨からルールベースでキーワード候補を返す。
-    D-05のVector Search連携前の暫定実装。
+    LLM推薦のフォールバック。
     """
     corpus = f"{title} {abstract}".lower()
     corpus = re.sub(r"\s+", " ", corpus).strip()

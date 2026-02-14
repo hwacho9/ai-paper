@@ -17,7 +17,7 @@ from app.modules.keywords.schemas import (
     KeywordResponse,
     KeywordUpdate,
 )
-from app.modules.keywords.suggester import suggest_keywords_mock
+from app.modules.keywords.suggester import suggest_keywords_llm
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +159,7 @@ class KeywordService:
         owner_keywords = await self.repository.list_by_owner(owner_uid)
         owner_labels = [k.get("label", "") for k in owner_keywords if k.get("label")]
 
-        suggested = suggest_keywords_mock(
+        suggested = await suggest_keywords_llm(
             title=paper.get("title", ""),
             abstract=paper.get("abstract", ""),
             owner_keyword_labels=owner_labels,
