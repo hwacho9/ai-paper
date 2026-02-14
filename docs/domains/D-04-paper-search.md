@@ -25,9 +25,6 @@ Geminiベースの論文検索を担当。結果を内部スキーマに正規�
 - **認証**: 必須
 - **パラメータ**:
   - `q` (string, 必須): 検索キーワード
-  - `year_from` (int, 任意): 開始年
-  - `year_to` (int, 任意): 終了年
-  - `author` (string, 任意): 著者名（部分一致）
   - `limit` (int, 任意): 結果件数（デフォルト: 20、最大: 100）
   - `offset` (int, 任意): オフセット
 - **レスポンス**: `SearchResultListResponse`
@@ -39,7 +36,6 @@ class SearchQuery(BaseModel):
     q: str
     year_from: int | None = None
     year_to: int | None = None
-    author: str | None = None
     limit: int = 20
     offset: int = 0
 

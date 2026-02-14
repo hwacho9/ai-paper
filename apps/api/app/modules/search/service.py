@@ -2,7 +2,6 @@
 D-04: 論文検索 - サービス
 """
 from app.core.gemini import gemini_client
-from app.modules.papers.repository import PaperRepository
 from app.modules.search.schemas import SearchResultItem, SearchResultListResponse
 from fastapi import HTTPException
 
