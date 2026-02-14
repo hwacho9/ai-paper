@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Google API Key (Vertex AI / Gemini)
     google_api_key: str | None = None
 
+    # PubMed API Key
+    pubmed_api_key: str | None = None
+
     @property
     def cors_allow_origins_list(self) -> list[str]:
         """CORS許可オリジンをリストで返す"""

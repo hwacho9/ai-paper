@@ -3,7 +3,9 @@ D-03: ペーパーライブラリ - サービス
 """
 from app.modules.papers.repository import PaperRepository
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
+
 from app.modules.memos.service import memo_service 
+from fastapi import UploadFile
 
 class PaperService:
     def __init__(self):
@@ -104,5 +106,35 @@ class PaperService:
         # URLは渡さない（Storageにある前提）
         await execute_ingest_job(paper_id, uid, request_id)
         return True
+
+    async def upload_and_ingest(self, paper_id: str, uid: str, file: UploadFile) -> bool:
+        """
+        PDFファイルをアップロードし、インジェスト（解析）を開始する。
+        """
+        from app.core.storage import upload_file
+        
+        # 1. 論文存在確認 (なければ本来作成すべきだが、一旦エラー)
+        paper = await self.repository.get_by_id(paper_id)
+        if not paper:
+            # 簡易的に、論文がない場合は作成するロジックにするか？
+            # 今回は「検索結果から詳細へ -> アップロード」フローなので、一旦False
+            return False
+
+        # 2. Upload to Storage
+        # Path: papers/{uid}/{paperID}.pdf
+        destination_blob_name = f"papers/{uid}/{paper_id}.pdf"
+        try:
+            storage_path = upload_file(file, destination_blob_name, content_type="application/pdf")
+        except Exception as e:
+            # Upload Failed
+            return False
+
+        # 3. Update Paper Record (Optional)
+        # 必要であれば storage_path をDBに保存。
+        # 現状はConventionベースなので保存しなくても動くが、保存しておくと丁寧。
+        # await self.repository.update(paper_id, {"pdf_storage_path": storage_path})
+
+        # 4. Trigger Ingestion Job
+        return await self.ingest_paper(paper_id, uid)
 
 paper_service = PaperService()
