@@ -113,7 +113,9 @@ Rules:
 - Write "label", "summary", and "relation_type" in Japanese.
 - Use very short relation labels (1 word preferred) for "relation_type".
 - relation_type examples: "発展", "応用", "比較", "サーベイ", "関連".
-- Add concise "relation_note" in Japanese (max 2-6 words) for children/related items.
+- Add concise "relation_note" in Japanese for children/related items.
+- "relation_note" should be noun-ending style and mention contribution/outcome.
+- relation_note examples: "推論速度向上への拡張", "分子表現学習の安定化", "汎化性能評価の比較".
 
 JSON schema:
 {{

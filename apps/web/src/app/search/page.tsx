@@ -153,6 +153,15 @@ export default function SearchPage() {
     };
   };
 
+  const relationDescription = (item: ClusterPaperItem): string => {
+    if (item.relation_type && item.relation_note) {
+      return `${item.relation_type}: ${item.relation_note}`;
+    }
+    if (item.relation_note) return item.relation_note;
+    if (item.relation_type) return item.relation_type;
+    return "";
+  };
+
   const fetchOrganizedResults = async (
     trimmedQuery: string,
     source: SearchSource,
@@ -617,20 +626,10 @@ export default function SearchPage() {
                                   <div className="flex items-center justify-between gap-3">
                                     <div className="min-w-0 flex-1">
                                       <p className="text-sm">{paper.title}</p>
-                                      {(item.relation_type ||
-                                        item.relation_note) && (
-                                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                                          {item.relation_type && (
-                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                              {item.relation_type}
-                                            </span>
-                                          )}
-                                          {item.relation_note && (
-                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                              {item.relation_note}
-                                            </span>
-                                          )}
-                                        </div>
+                                      {relationDescription(item) && (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {relationDescription(item)}
+                                        </p>
                                       )}
                                     </div>
                                     <button
@@ -670,20 +669,10 @@ export default function SearchPage() {
                                   <div className="flex items-center justify-between gap-3">
                                     <div className="min-w-0 flex-1">
                                       <p className="text-sm">{paper.title}</p>
-                                      {(item.relation_type ||
-                                        item.relation_note) && (
-                                        <div className="mt-1 flex flex-wrap items-center gap-1">
-                                          {item.relation_type && (
-                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                              {item.relation_type}
-                                            </span>
-                                          )}
-                                          {item.relation_note && (
-                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                                              {item.relation_note}
-                                            </span>
-                                          )}
-                                        </div>
+                                      {relationDescription(item) && (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {relationDescription(item)}
+                                        </p>
                                       )}
                                     </div>
                                     <button
