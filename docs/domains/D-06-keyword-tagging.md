@@ -55,6 +55,7 @@ papers/{paperId}/keywords/{keywordId}
 | `GET`    | `/api/v1/keywords`                       | キーワード一覧       |
 | `PATCH`  | `/api/v1/keywords/:id`                   | キーワード更新       |
 | `DELETE` | `/api/v1/keywords/:id`                   | キーワード削除       |
+| `GET`    | `/api/v1/papers/:id/keywords`            | 論文のキーワード一覧 |
 | `POST`   | `/api/v1/papers/:id/keywords`            | 論文にキーワード付与 |
 | `DELETE` | `/api/v1/papers/:id/keywords/:keywordId` | キーワード解除       |
 | `POST`   | `/api/v1/papers/:id/keywords/suggest`    | 自動キーワード推薦   |
@@ -66,4 +67,19 @@ papers/{paperId}/keywords/{keywordId}
 # TODO(F-0602): 論文タグ付け | AC: 論文とキーワードの紐付け/解除 | owner:@
 # TODO(F-0603): 自動推薦 | AC: LLM/埋め込みベースのキーワード候補返却 | owner:@
 # TODO(F-0604): 適合性判断 | AC: キーワード-論文の適合度スコア返却 | owner:@
+# TODO(F-0602): ownerUidベースACLへの移行 | AC: papers.ownerUid導入後、likes依存チェックをownerUid照合に置換 | owner:@
 ```
+
+## 実装メモ（F-0603 暫定）
+
+- 現在の `POST /api/v1/papers/:id/keywords/suggest` は **モックのルールベース推薦** を実装している。
+- 推薦結果は `papers/{paperId}/keywords/{keywordId}` に `source="auto"` で保存される。
+- `manual` タグは保持し、`auto` タグのみ再計算時に置換する。
+- ライブラリ追加（Like ON）時にも同じ推薦ロジックを呼び出し、自動タグ付けを行う。
+- D-05のVector Search I/O確定後に、推薦生成部を置換する（保存先/ACL方針は維持）。
+
+## 実装メモ（ACL移行）
+
+- 現在のF-0602実装では `KeywordService._ensure_paper_access` が **likesベース** でアクセス可否を判定している。
+- `papers.ownerUid` 導入後は、この関数の判定ロジックを **ownerUid照合ベース** に置換すること。
+- 置換対象をこの関数に集約しているため、移行時の修正箇所は原則ここ1箇所を想定。
