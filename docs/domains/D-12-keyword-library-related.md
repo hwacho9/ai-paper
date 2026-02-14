@@ -49,6 +49,12 @@
 - 既定: 論文キーワードの並び順を尊重
 - 代替: 優先度スコア（今後拡張）
 
+### 本仕様での確定値
+
+- 対象キーワード: `paper keywords` と `prerequisite keywords` の両方
+- 並び順: 登録済み配列の順序をそのまま使用
+- 既存UIとの関係: 既存「関連論文」表示を本仕様で置き換える（乗っ取り）
+
 ## API案（新規）
 
 ### `GET /api/v1/papers/:id/library-related-by-keywords`
@@ -58,7 +64,7 @@
 
 #### クエリパラメータ
 
-- `per_keyword_limit` (int, 任意, default: 3, max: 10)
+- `per_keyword_limit` (int, 任意, default: 15, max: 20)
 - `max_keywords` (int, 任意, default: 8, max: 20)
 
 #### レスポンス例
@@ -116,17 +122,23 @@ class LibraryRelatedByKeywordResponse(BaseModel):
 
 ## バックエンド実装方針
 
-1. 対象論文のキーワード取得
+1. 対象論文のキーワード取得（paper + prerequisite）
 2. ユーザーのライブラリ論文一覧取得（対象論文自身は除外）
-3. キーワード順に候補スコア計算（keyword overlap + 埋め込み類似）
+3. キーワード順に候補スコア計算（埋め込み類似を優先、不可時は keyword overlap）
 4. 各キーワードで上位 `per_keyword_limit` 件採用
 5. 採用済み論文IDを `seen` セットで管理し、後続キーワードから除外
-6. 各採用論文に `reason`（体言止めの短文）を生成
+6. 各採用論文に `reason`（体言止めの短文）をルールベースで生成
+
+### 重み付けについて
+
+- 可能。実装上は以下のような重み付けができる。
+  - `paper keywords` を高重み、`prerequisite keywords` を低重み
+  - キーワード順に減衰重み（先頭優先）
+- ただし本フェーズでは「配列順での逐次採用」を優先し、重み付けは次段で導入する。
 
 ## フロントエンド実装方針
 
-- `related-panel.tsx` に「キーワード別マイライブラリ関連」セクションを追加
-- 既存「類似度ランキング」表示とは並列表示または切替表示
+- `related-panel.tsx` の既存関連リストを置き換えて「キーワード別マイライブラリ関連」を表示
 - 各論文アイテムは `Link` で既存論文詳細へ遷移
 
 ## ドメイン境界
