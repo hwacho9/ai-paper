@@ -5,7 +5,7 @@
  * 検索フォーム + フィルター + 結果グリッド
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     searchPapers,
     SearchResultItem,
@@ -16,10 +16,32 @@ import { useAuth } from "@/components/auth/auth-context";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const SEARCH_HISTORY_KEY = "paper-search-history";
+const MAX_HISTORY_ITEMS = 10;
+
 function formatCitations(count: number | null): string {
     if (!count) return "0";
     if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
     return String(count);
+}
+
+function loadSearchHistory(): string[] {
+    if (typeof window === "undefined") return [];
+    try {
+        const stored = localStorage.getItem(SEARCH_HISTORY_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveSearchHistory(history: string[]): void {
+    if (typeof window === "undefined") return;
+    try {
+        localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(history));
+    } catch {
+        console.warn("Failed to save search history");
+    }
 }
 
 export default function SearchPage() {
@@ -29,17 +51,60 @@ export default function SearchPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
     const [hasSearched, setHasSearched] = useState(false);
+    const [searchHistory, setSearchHistory] = useState<string[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const suggestionsRef = useRef<HTMLDivElement>(null);
+
+    // 初期化時に検索履歴を読み込む
+    useEffect(() => {
+        setSearchHistory(loadSearchHistory());
+    }, []);
+
+    // クリックアウトでサジェストを非表示
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (
+                suggestionsRef.current &&
+                !suggestionsRef.current.contains(event.target as Node) &&
+                searchInputRef.current &&
+                !searchInputRef.current.contains(event.target as Node)
+            ) {
+                setShowSuggestions(false);
+            }
+        }
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredSuggestions = searchHistory.filter((item) =>
+        item.toLowerCase().includes(query.toLowerCase()),
+    );
+
+    const handleSelectSuggestion = (suggestion: string) => {
+        setQuery(suggestion);
+        setShowSuggestions(false);
+    };
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!query.trim()) return;
 
+        // 検索履歴に追加
+        const trimmedQuery = query.trim();
+        let newHistory = [trimmedQuery, ...searchHistory.filter((q) => q !== trimmedQuery)];
+        newHistory = newHistory.slice(0, MAX_HISTORY_ITEMS);
+        setSearchHistory(newHistory);
+        saveSearchHistory(newHistory);
+
         setLoading(true);
         setError("");
         setHasSearched(true);
+        setShowSuggestions(false);
 
         try {
-            const data = await searchPapers({ q: query, limit: 20 });
+            const data = await searchPapers({ q: trimmedQuery, limit: 20 });
             setResults(data.results);
         } catch (err: any) {
             // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -132,9 +197,11 @@ export default function SearchPage() {
                         />
                     </svg>
                     <input
+                        ref={searchInputRef}
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
+                        onFocus={() => setShowSuggestions(true)}
                         placeholder="キーワード、タイトル、著者名..."
                         className="w-full rounded-xl border border-border bg-card py-3.5 pl-12 pr-4 text-base outline-none
               transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
@@ -146,6 +213,42 @@ export default function SearchPage() {
               transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50">
                         {loading ? "検索中..." : "検索"}
                     </button>
+
+                    {/* 検索履歴サジェスト */}
+                    {showSuggestions && filteredSuggestions.length > 0 && (
+                        <div
+                            ref={suggestionsRef}
+                            className="absolute top-full left-0 right-0 z-10 mt-2 rounded-xl border border-border bg-card shadow-lg">
+                            <div className="max-h-64 overflow-y-auto">
+                                {filteredSuggestions.map((suggestion, index) => (
+                                    <button
+                                        key={index}
+                                        type="button"
+                                        onClick={() => handleSelectSuggestion(suggestion)}
+                                        className="w-full px-4 py-2.5 text-left text-sm hover:bg-primary/10 transition-colors first:rounded-t-lg last:rounded-b-lg border-b border-border/50 last:border-b-0 flex items-center gap-2">
+                                        <svg
+                                            className="h-4 w-4 text-muted-foreground flex-shrink-0"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            strokeWidth={1.5}
+                                            stroke="currentColor">
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"
+                                            />
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"
+                                            />
+                                        </svg>
+                                        <span className="flex-1">{suggestion}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </form>
 
