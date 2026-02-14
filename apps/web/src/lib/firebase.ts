@@ -29,4 +29,18 @@ if (firebaseConfig.apiKey) {
     storage = getStorage(app);
 }
 
-export { app, auth, storage };
+async function getCurrentAuthToken(forceRefresh = false): Promise<string> {
+    if (!auth) return "";
+
+    try {
+        await auth.authStateReady();
+        const currentUser = auth.currentUser;
+        if (!currentUser) return "";
+        return await currentUser.getIdToken(forceRefresh);
+    } catch (error) {
+        console.warn("Failed to get Firebase auth token:", error);
+        return "";
+    }
+}
+
+export { app, auth, storage, getCurrentAuthToken };

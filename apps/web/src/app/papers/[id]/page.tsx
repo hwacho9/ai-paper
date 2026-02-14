@@ -63,16 +63,8 @@ export default function PaperDetailPage({
         return Math.floor(parsed);
     }, [searchParams]);
 
-    const resolveHighlightText = useCallback((): string => {
-        const rawHighlight = searchParams.get("hl");
-        return rawHighlight ? rawHighlight.trim() : "";
-    }, [searchParams]);
-
     const [activeTab, setActiveTab] = useState<Tab>(resolveTab());
     const [targetPage, setTargetPage] = useState<number>(resolvePage());
-    const [highlightText, setHighlightText] = useState<string>(
-        resolveHighlightText(),
-    );
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -99,12 +91,7 @@ export default function PaperDetailPage({
 
         const nextPage = resolvePage();
         setTargetPage((prev) => (prev === nextPage ? prev : nextPage));
-
-        const nextHighlightText = resolveHighlightText();
-        setHighlightText((prev) =>
-            prev === nextHighlightText ? prev : nextHighlightText,
-        );
-    }, [resolveTab, resolvePage, resolveHighlightText]);
+    }, [resolveTab, resolvePage]);
 
     const fetchPaper = useCallback(async () => {
         try {
@@ -366,7 +353,6 @@ export default function PaperDetailPage({
                     title={paper.title}
                     pdfUrl={paper.pdf_url}
                     page={targetPage}
-                    highlightText={highlightText}
                 />
             )}
 

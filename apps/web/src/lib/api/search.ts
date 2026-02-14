@@ -7,6 +7,7 @@ export interface SearchQuery {
   q: string;
   year_from?: number;
   year_to?: number;
+  source?: "auto" | "all" | "arxiv" | "pubmed" | "scholar" | "gemini";
   limit?: number;
   offset?: number;
 }
@@ -40,6 +41,7 @@ export function searchPapers(
   params.append("q", query.q);
   if (query.year_from) params.append("year_from", String(query.year_from));
   if (query.year_to) params.append("year_to", String(query.year_to));
+  if (query.source) params.append("source", query.source);
   if (query.limit) params.append("limit", String(query.limit));
   if (query.offset) params.append("offset", String(query.offset));
 

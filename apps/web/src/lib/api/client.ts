@@ -3,7 +3,7 @@
  * Firebase Auth IDトークンを自動付与してバックエンドAPIを呼び出す
  */
 
-import { auth } from "@/lib/firebase";
+import { auth, getCurrentAuthToken } from "@/lib/firebase";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -18,9 +18,8 @@ export async function apiFetch<T>(
 
   // Firebase Auth IDトークンを取得（ログイン中のみ）
   let token = "";
-  const user = auth?.currentUser;
-  if (user) {
-    token = await user.getIdToken();
+  if (auth) {
+    token = await getCurrentAuthToken();
   }
 
   const res = await fetch(url, {

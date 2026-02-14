@@ -16,22 +16,37 @@ logger = logging.getLogger(__name__)
 
 class RelatedService:
     def __init__(self):
-        self.db = get_firestore_client()
+        self.db = None
         self.paper_repo = PaperRepository()
-        # Initialize AI Platform if needed (usually handled by gcloud auth or env vars)
-        aiplatform.init(
-            project=settings.gcp_project_id,
-            location=settings.gcp_region
-        )
-        self.index_endpoint_name = (
-            f"projects/{settings.gcp_project_id}/locations/{settings.gcp_region}/indexEndpoints/{settings.vector_index_endpoint_id}"
-        )
+        self.index_endpoint_name = ""
         self.executor = ThreadPoolExecutor(max_workers=3)
+
+    def _ensure_initialized(self):
+        """
+        外部クライアントの遅延初期化。
+        起動時ではなく、実際にrelated機能が呼ばれたタイミングで初期化する。
+        """
+        if self.db is None:
+            self.db = get_firestore_client()
+
+        if not self.index_endpoint_name:
+            vector_index_endpoint_id = getattr(settings, "vector_index_endpoint_id", "")
+            if not vector_index_endpoint_id:
+                raise RuntimeError("vector_index_endpoint_id is not configured")
+            aiplatform.init(
+                project=settings.gcp_project_id,
+                location=settings.gcp_region,
+            )
+            self.index_endpoint_name = (
+                f"projects/{settings.gcp_project_id}/locations/{settings.gcp_region}"
+                f"/indexEndpoints/{vector_index_endpoint_id}"
+            )
 
     async def get_related_papers(self, paper_id: str, limit: int = 5) -> List[RelatedPaper]:
         """
         Get related papers for a given paper ID using Vector Search.
         """
+        self._ensure_initialized()
         # 1. Get paper details (abstract)
         paper_ref = self.db.collection("papers").document(paper_id)
         paper_doc = await paper_ref.get()
@@ -142,6 +157,7 @@ class RelatedService:
         Nodes = Project node + Papers in Project
         Edges = Project -> Paper
         """
+        self._ensure_initialized()
         # 1. Get Project Papers (IDs)
         project_ref = self.db.collection("projects").document(project_id)
         project_doc = await project_ref.get()
@@ -223,6 +239,7 @@ class RelatedService:
         Nodes: Projects, Papers
         Edges: Project -> Paper (and Paper -> Paper)
         """
+        self._ensure_initialized()
         # 0. Check Cache
         cache_ref = self.db.collection("users").document(user_id).collection("cache").document("graph_global")
         cache_doc = await cache_ref.get()
@@ -373,6 +390,7 @@ class RelatedService:
 
     async def invalidate_user_graph_cache(self, user_id: str):
         """Invalidate the global graph cache for a user."""
+        self._ensure_initialized()
         try:
             cache_ref = self.db.collection("users").document(user_id).collection("cache").document("graph_global")
             await cache_ref.delete()
