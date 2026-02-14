@@ -122,20 +122,10 @@ export default function LibraryPage() {
 
     const buildCitationLink = (citation: {
         paper_id: string;
-        chunk_id: string;
         page_range: number[];
-        snippet: string;
     }) => {
         const targetPage = Math.max(1, citation.page_range?.[0] || 1);
-        const normalizedSnippet = citation.snippet
-            .replace(/\s+/g, " ")
-            .trim()
-            .slice(0, 120);
-        const highlightQuery = normalizedSnippet
-            ? `&hl=${encodeURIComponent(normalizedSnippet)}`
-            : "";
-
-        return `/papers/${citation.paper_id}?tab=pdf&page=${targetPage}&chunk=${citation.chunk_id}${highlightQuery}`;
+        return `/papers/${citation.paper_id}?tab=pdf&page=${targetPage}`;
     };
 
     const fetchData = useCallback(async () => {
