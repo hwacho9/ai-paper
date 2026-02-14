@@ -39,6 +39,14 @@ export type AgentChatResponse = {
   steps: AgentStepResult[];
   artifacts: Record<string, unknown>;
   target_path?: string | null;
+  verification?: {
+    verdict: "met" | "partial" | "not_met" | "not_executed";
+    summary: string;
+    achieved: string[];
+    missing: string[];
+  } | null;
+  pending_actions: AgentAction[];
+  pending_plan: string[];
 };
 
 export function runAgentChat(

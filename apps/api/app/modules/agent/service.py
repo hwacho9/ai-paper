@@ -58,6 +58,7 @@ class AgentService:
         else:
             plan = await self._make_plan(req)
         steps: list[AgentStepResult] = []
+        pending_actions: list[AgentAction] = []
         state: dict[str, Any] = {
             "last_search_results": [],
             "last_liked_paper_id": req.context.paper_id,
@@ -67,7 +68,7 @@ class AgentService:
         }
 
         if req.execute:
-            for action in plan.actions:
+            for idx, action in enumerate(plan.actions):
                 result = await self._execute_action(uid, action, state)
                 steps.append(result)
                 if result.status == "completed":
@@ -87,6 +88,7 @@ class AgentService:
                         error="stop_on_failure",
                     )
                 )
+                pending_actions = plan.actions[idx:]
                 break
 
         verification = await self._verify_outcome(req, plan, steps, state)
@@ -102,6 +104,9 @@ class AgentService:
             steps=steps,
             artifacts=state["artifacts"],
             target_path=target_path,
+            verification=verification,
+            pending_actions=pending_actions,
+            pending_plan=[self._action_to_todo(a) for a in pending_actions],
         )
 
     async def _make_plan(self, req: AgentChatRequest) -> AgentPlan:

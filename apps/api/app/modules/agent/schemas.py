@@ -40,6 +40,13 @@ class AgentStepResult(BaseModel):
     error: str | None = None
 
 
+class AgentVerification(BaseModel):
+    verdict: Literal["met", "partial", "not_met", "not_executed"] = "partial"
+    summary: str = ""
+    achieved: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+
+
 class AgentChatResponse(BaseModel):
     reply: str
     used_function_doc: bool = True
@@ -48,3 +55,6 @@ class AgentChatResponse(BaseModel):
     steps: list[AgentStepResult]
     artifacts: dict[str, Any] = Field(default_factory=dict)
     target_path: str | None = None
+    verification: AgentVerification | None = None
+    pending_actions: list[AgentAction] = Field(default_factory=list)
+    pending_plan: list[str] = Field(default_factory=list)
