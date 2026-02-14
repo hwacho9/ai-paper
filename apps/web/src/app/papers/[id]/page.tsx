@@ -30,6 +30,7 @@ import { PaperTabs } from "./_components/paper-tabs";
 import { OverviewPanel } from "./_components/overview-panel";
 import { PdfPanel } from "./_components/pdf-panel";
 import { RelatedPanel } from "./_components/related-panel";
+import { useKeywordRelatedStatus } from "./_components/use-keyword-related-status";
 import type { Paper, Tab } from "./types";
 
 export default function PaperDetailPage({
@@ -65,6 +66,10 @@ export default function PaperDetailPage({
 
     const [activeTab, setActiveTab] = useState<Tab>(resolveTab());
     const [targetPage, setTargetPage] = useState<number>(resolvePage());
+    const [relatedFocusKeyword, setRelatedFocusKeyword] = useState<string | null>(
+        null,
+    );
+    const [relatedFocusRequestId, setRelatedFocusRequestId] = useState(0);
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -84,6 +89,8 @@ export default function PaperDetailPage({
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingCountRef = useRef(0);
     const [keywordsError, setKeywordsError] = useState<string | null>(null);
+    const { statusMap: keywordRelatedStatusMap, loading: keywordRelatedStatusLoading } =
+        useKeywordRelatedStatus(id, paperKeywords, keywordsLoading);
 
     useEffect(() => {
         const nextTab = resolveTab();
@@ -302,6 +309,12 @@ export default function PaperDetailPage({
         }
     };
 
+    const handleKeywordClick = (label: string) => {
+        setRelatedFocusKeyword(label);
+        setRelatedFocusRequestId((prev) => prev + 1);
+        setActiveTab("related");
+    };
+
     if (loading) {
         return (
             <div className="space-y-6 animate-pulse">
@@ -343,6 +356,9 @@ export default function PaperDetailPage({
                 keywordsError={keywordsError}
                 onAddKeyword={handleAddKeyword}
                 onDeleteKeyword={handleDeleteKeyword}
+                onKeywordClick={handleKeywordClick}
+                keywordRelatedStatusMap={keywordRelatedStatusMap}
+                keywordRelatedStatusLoading={keywordRelatedStatusLoading}
             />
 
             <PaperTabs activeTab={activeTab} onChange={setActiveTab} />
@@ -383,7 +399,13 @@ export default function PaperDetailPage({
                 />
             )}
 
-            {activeTab === "related" && <RelatedPanel paperId={id} />}
+            {activeTab === "related" && (
+                <RelatedPanel
+                    paperId={id}
+                    focusKeyword={relatedFocusKeyword}
+                    focusRequestId={relatedFocusRequestId}
+                />
+            )}
         </div>
     );
 }

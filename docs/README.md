@@ -44,7 +44,7 @@
 └── .agent/workflows/           # 開発スキル
 ```
 
-### ドメイン機能書（D-01〜D-10）
+### ドメイン機能書（D-01〜D-12）
 
 | ID   | ドメイン             | ドキュメント                                                       |
 | ---- | -------------------- | ------------------------------------------------------------------ |
@@ -59,6 +59,7 @@
 | D-08 | メモ & ノート        | [D-08-memo-notes.md](./domains/D-08-memo-notes.md)                 |
 | D-09 | 読解サポート         | [D-09-reading-support.md](./domains/D-09-reading-support.md)       |
 | D-10 | TeX & BibTeX         | [D-10-tex-bibtex.md](./domains/D-10-tex-bibtex.md)                 |
+| D-12 | キーワード起点ライブラリ関連 | [D-12-keyword-library-related.md](./domains/D-12-keyword-library-related.md) |
 
 ### 開発ガイド
 

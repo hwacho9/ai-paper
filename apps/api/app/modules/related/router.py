@@ -17,6 +17,7 @@ async def get_related_papers(
     """
     return await related_service.get_related_papers(paper_id, limit)
 
+
 @router.get("/graph", response_model=GraphData)
 async def get_global_graph(
     current_user: dict = Depends(get_current_user),

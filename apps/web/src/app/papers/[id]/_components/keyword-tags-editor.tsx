@@ -4,6 +4,7 @@ import type { PaperKeywordResponse } from "@/lib/api";
 import { KeywordInputControl } from "./keyword-input-control";
 import { KeywordTagsToolbar } from "./keyword-tags-toolbar";
 import { useKeywordTagsEditor } from "./use-keyword-tags-editor";
+import type { KeywordRelatedStatusMap } from "./use-keyword-related-status";
 
 interface KeywordTagsEditorProps {
   keywords: PaperKeywordResponse[];
@@ -11,6 +12,9 @@ interface KeywordTagsEditorProps {
   error: string | null;
   onAddKeyword: (label: string, reason?: string) => Promise<void>;
   onDeleteKeyword: (keywordId: string) => Promise<void>;
+  onKeywordClick?: (label: string) => void;
+  keywordRelatedStatusMap?: KeywordRelatedStatusMap;
+  keywordRelatedStatusLoading?: boolean;
 }
 
 export function KeywordTagsEditor({
@@ -19,6 +23,9 @@ export function KeywordTagsEditor({
   error,
   onAddKeyword,
   onDeleteKeyword,
+  onKeywordClick,
+  keywordRelatedStatusMap,
+  keywordRelatedStatusLoading,
 }: KeywordTagsEditorProps) {
   const {
     deleteMode,
@@ -53,18 +60,39 @@ export function KeywordTagsEditor({
     keyword: PaperKeywordResponse,
     isPrerequisite: boolean,
   ) => {
+    const normalizedLabel = keyword.label.trim().toLowerCase();
+    const hasRelated = keywordRelatedStatusMap?.[normalizedLabel];
+    const linkedStyle = isPrerequisite
+      ? "cursor-pointer border-amber-400/40 bg-amber-400/20 text-amber-200 hover:bg-amber-400/30"
+      : "cursor-pointer border-sky-400/40 bg-sky-400/20 text-sky-200 hover:bg-sky-400/30";
+    const unlinkedStyle = isPrerequisite
+      ? "cursor-pointer border-amber-300/20 bg-zinc-500/15 text-amber-100/80"
+      : "cursor-pointer border-sky-300/20 bg-zinc-500/15 text-sky-100/80";
+
     const baseStyle = deleteMode
-      ? "border-red-400/60 bg-red-500/15 text-red-300 hover:bg-red-500/25"
-      : isPrerequisite
-        ? "cursor-default border-amber-400/40 bg-amber-400/20 text-amber-200"
-        : "cursor-default border-sky-400/40 bg-sky-400/20 text-sky-200";
+      ? "border-red-400/60 bg-red-500/15 text-red-300"
+      : hasRelated === true
+        ? linkedStyle
+      : hasRelated === false
+        ? unlinkedStyle
+      : keywordRelatedStatusLoading
+        ? "cursor-pointer border-primary/30 bg-primary/10 text-primary/80"
+      : linkedStyle;
+
+    const handleClick = () => {
+      if (deleteMode) {
+        void deleteKeyword(keyword.keyword_id);
+        return;
+      }
+      onKeywordClick?.(keyword.label);
+    };
 
     return (
       <button
         key={keyword.keyword_id}
         type="button"
-        onClick={() => deleteKeyword(keyword.keyword_id)}
-        disabled={!deleteMode || deletingKeywordId === keyword.keyword_id}
+        onClick={handleClick}
+        disabled={deletingKeywordId === keyword.keyword_id}
         className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-all duration-200 ${baseStyle} ${
           deletingKeywordId === keyword.keyword_id ? "opacity-60" : ""
         }`}
