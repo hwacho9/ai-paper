@@ -33,6 +33,9 @@ class PaperService:
         if is_liked:
             # Unlike
             await self.repository.remove_like(uid, paper_id)
+            # Invalidate Graph Cache
+            from app.modules.related.service import related_service
+            await related_service.invalidate_user_graph_cache(uid)
             return False
         else:
             # Like
@@ -51,6 +54,10 @@ class PaperService:
                 request_id = f"auto-{uuid.uuid4()}"
                 await execute_ingest_job(paper["id"], uid, request_id, pdf_url=paper.get("pdf_url"))
             
+            # Invalidate Graph Cache
+            from app.modules.related.service import related_service
+            await related_service.invalidate_user_graph_cache(uid)
+
             return True
 
     async def get_user_library(self, uid: str) -> PaperListResponse:

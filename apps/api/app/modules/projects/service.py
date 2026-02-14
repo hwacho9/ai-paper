@@ -26,6 +26,10 @@ class ProjectService:
         if seed_ids:
             project["paper_count"] = len(seed_ids)
 
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+
         return project
 
     async def get_project(self, project_id: str, owner_uid: str) -> dict:
@@ -61,6 +65,10 @@ class ProjectService:
                 detail="プロジェクトが見つかりません。",
             )
 
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+
     async def add_paper(self, project_id: str, paper_id: str, owner_uid: str, note: str = "", role: str = "reference") -> dict:
         """参照論文追加"""
         # オーナー検証
@@ -70,11 +78,17 @@ class ProjectService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="プロジェクトが見つかりません。",
             )
-        return await self.repository.add_paper(project_id, {
+        result = await self.repository.add_paper(project_id, {
             "paper_id": paper_id,
             "note": note,
             "role": role,
         })
+        
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+        
+        return result
 
     async def remove_paper(self, project_id: str, paper_id: str, owner_uid: str) -> None:
         """参照論文削除"""
@@ -90,6 +104,10 @@ class ProjectService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="論文が見つかりません。",
             )
+
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
 
     async def get_project_papers(self, project_id: str, owner_uid: str) -> list[dict]:
         """プロジェクトの参照論文一覧"""

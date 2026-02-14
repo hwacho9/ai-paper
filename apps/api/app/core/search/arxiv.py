@@ -1,18 +1,44 @@
 import httpx
 import xml.etree.ElementTree as ET
+import time
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.search.base import BaseSearchClient, SearchResult
 
 class ArxivClient(BaseSearchClient):
     BASE_URL = "https://export.arxiv.org/api/query"
 
     def __init__(self):
-        # ArXiv API Guideline: max 1 req / 3 sec is recommended, 
-        # but user asked for "1 req / 1 sec". We stick to 1.0s to be safe but responsive.
-        super().__init__(interval=1.0)
+        # ArXiv API Guideline: max 1 req / 3 sec is recommended
+        super().__init__(interval=3.0)
+        self._cache = {}
+        self._cache_ttl = 3600  # 1 hour
 
     async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
+        cache_key = f"{query}:{limit}"
+        now = time.time()
+        
+        # Check cache
+        if cache_key in self._cache:
+            data, timestamp = self._cache[cache_key]
+            if now - timestamp < self._cache_ttl:
+                return data
+            else:
+                del self._cache[cache_key]
+
         await self._wait_for_rate_limit()
         
+        results = await self._fetch_with_retry(query, limit)
+        
+        # Update cache
+        self._cache[cache_key] = (results, now)
+        return results
+
+    @retry(
+        retry=retry_if_exception_type(httpx.HTTPStatusError),
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10)
+    )
+    async def _fetch_with_retry(self, query: str, limit: int) -> list[SearchResult]:
         params = {
             "search_query": f"all:{query}",
             "start": 0,

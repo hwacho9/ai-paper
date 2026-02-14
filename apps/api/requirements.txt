@@ -2,7 +2,8 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
 pydantic==2.9.0
-pydantic-settings==2.5.0
+pydantic-settings
+tenacity
 
 # Firebase Admin (認証・Firestore)
 firebase-admin==6.5.0
