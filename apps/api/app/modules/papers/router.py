@@ -48,3 +48,17 @@ async def get_paper(
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
     return paper
+
+@router.post("/{paper_id}/ingest", status_code=status.HTTP_202_ACCEPTED)
+async def ingest_paper(
+    paper_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    論文のインジェスト（解析）を手動トリガーする。
+    PDFアップロード完了後に呼び出す。
+    """
+    success = await paper_service.ingest_paper(paper_id, current_user["uid"])
+    if not success:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    return {"status": "accepted", "message": "Ingestion started"}

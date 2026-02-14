@@ -24,13 +24,13 @@
 ### バックエンド (FastAPI)
 
 - [x] **D-04 Search**: 論文検索プロキシAPI
-  - `GET /api/v1/search/papers` (Semantic Scholar)
+    - `GET /api/v1/search/papers` (Semantic Scholar)
 - [x] **D-03 Library**: 論文保存 & 取得
-  - `POST /api/v1/library/{id}/like` (Toggle Like)
-  - `GET /api/v1/library` (My Library)
+    - `POST /api/v1/library/{id}/like` (Toggle Like)
+    - `GET /api/v1/library` (My Library)
 - [x] **D-08 Memo**: メモ自動生成 & CRUD
-  - `POST /api/v1/memos` (Create) - _Auto-generated on Like_
-  - `GET /api/v1/memos` (List)
+    - `POST /api/v1/memos` (Create) - _Auto-generated on Like_
+    - `GET /api/v1/memos` (List)
 
 ### フロントエンド (Next.js)
 
@@ -49,10 +49,10 @@
 ### バックエンド
 
 - [ ] **D-02 Project**: プロジェクト CRUD
-  - `POST /projects` (Create Project)
-  - `POST /projects/{id}/papers` (Add Paper to Project)
+    - `POST /projects` (Create Project)
+    - `POST /projects/{id}/papers` (Add Paper to Project)
 - [ ] **D-07 Graph**: 関連論文グラフデータ提供
-  - `GET /papers/{id}/related` (Mock/Simple Logic)
+    - `GET /papers/{id}/related` (Mock/Simple Logic)
 
 ### フロントエンド
 
@@ -68,10 +68,10 @@
 
 ### バックエンド/パイプライン
 
-- [ ] **D-05 Ingestion**: PDF Upload & Parsing Pipeline
-  - PDF Upload API -> GCS
-  - Pub/Sub Event -> Worker (Parse/Chunk/Embed)
-  - Vector Search Indexing
+- [x] **D-05 Ingestion**: PDF Upload & Parsing Pipeline
+    - [ ] PDF Upload API -> Firebase Storage
+    - [x] Cloud Run Job Worker (Parse/Chunk/Embed/Index)
+    - [x] Vector Search Indexing
 - [ ] **D-09 Reading**: チャンク単位のハイライト/引用
 
 ### フロントエンド

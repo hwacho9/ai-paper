@@ -9,7 +9,8 @@ from fastapi import HTTPException
 
 class SearchService:
     def __init__(self):
-        self.api_client = SemanticScholarClient(api_key=settings.semantic_scholar_api_key)
+        # API Key is disabled per user request
+        self.api_client = SemanticScholarClient(api_key=None)
         self.gemini_client = gemini_client
 
     async def search_papers(self, query: str, limit: int = 20, offset: int = 0) -> SearchResultListResponse:
@@ -23,48 +24,24 @@ class SearchService:
         # Priority: Gemini -> Semantic Scholar (Fallback)
         # As requested by user "make it work with Gemini"
         
-        # 1. Try Gemini
-        if self.gemini_client.api_key:
-            try:
-                raw_data = await self.gemini_client.search_papers(query, limit=limit)
-                source = "gemini"
-                
-                items = []
-                for paper in raw_data.get("data", []):
-                    items.append(self._normalize_paper(paper, source))
-
-                return SearchResultListResponse(
-                    results=items,
-                    total=raw_data.get("total", 0),
-                    offset=offset,
-                    limit=limit
-                )
-            except Exception as e:
-                print(f"Gemini API Error: {e}")
-                # Fallthrough to Semantic Scholar
-        
-        # 2. Try Semantic Scholar
-        print("Using Semantic Scholar...")
+        # 1. Try Gemini (Vertex AI)
         try:
-            raw_data = await self.api_client.search_papers(query, offset=offset, limit=limit)
-            source = "semantic_scholar"
+            raw_data = await self.gemini_client.search_papers(query, limit=limit)
+            source = "gemini"
+            
+            items = []
+            for paper in raw_data.get("data", []):
+                items.append(self._normalize_paper(paper, source))
+
+            return SearchResultListResponse(
+                results=items,
+                total=raw_data.get("total", 0),
+                offset=offset,
+                limit=limit
+            )
         except Exception as e:
-            print(f"Semantic Scholar API Error: {e}")
-            from fastapi import HTTPException
-            if "429" in str(e):
-                 raise HTTPException(status_code=429, detail="検索APIのレート制限に達しました。")
-            raise HTTPException(status_code=503, detail="検索サービスが利用できません。")
-
-        items = []
-        for paper in raw_data.get("data", []):
-            items.append(self._normalize_paper(paper, source))
-
-        return SearchResultListResponse(
-            results=items,
-            total=raw_data.get("total", 0),
-            offset=offset,
-            limit=limit
-        )
+            print(f"Gemini API Error: {e}")
+            raise HTTPException(status_code=500, detail=f"Gemini API Error: {str(e)}")
 
     def _normalize_paper(self, paper: dict, source: str) -> SearchResultItem:
         # Authors

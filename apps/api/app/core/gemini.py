@@ -7,21 +7,23 @@ import os
 from app.core.config import settings
 
 class GeminiClient:
-    # BASE_URL will be constructed dynamically
-    
     def __init__(self):
-        self.api_key = settings.google_api_key
+        self.project_id = settings.gcp_project_id
+        self.location = settings.gcp_region
         self.model_name = os.getenv("GOOGLE_MODEL_NAME", "gemini-1.5-flash")
-        self.base_url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_name}:generateContent"
+        
+        # Initialize Vertex AI
+        import vertexai
+        vertexai.init(project=self.project_id, location=self.location)
+        
+        from vertexai.generative_models import GenerativeModel
+        self.model = GenerativeModel(self.model_name)
 
     async def search_papers(self, query: str, limit: int = 10) -> dict:
         """
         Ask Gemini to recommend papers based on the query.
         This is a fallback and results might be hallucinations.
         """
-        if not self.api_key:
-            raise ValueError("GOOGLE_API_KEY is not set")
-
         prompt = f"""
         List {limit} academic papers related to "{query}".
         Return ONLY a raw JSON object (no markdown formatting).
@@ -32,6 +34,7 @@ class GeminiClient:
         - venue: str (or "arXiv")
         - abstract: str (brief summary)
         - externalIds: {{ "ArXiv": str, "DOI": str }} (if known, else empty)
+        - openAccessPdf: {{ "url": str }} (optional, if a direct PDF link is known)
         
         Example:
         [
@@ -41,49 +44,45 @@ class GeminiClient:
             "year": 2017,
             "venue": "NeurIPS",
             "abstract": "...",
-            "externalIds": {{ "ArXiv": "1706.03762" }}
+            "externalIds": {{ "ArXiv": "1706.03762" }},
+            "openAccessPdf": {{ "url": "https://arxiv.org/pdf/1706.03762.pdf" }}
           }}
         ]
         """
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.base_url}?key={self.api_key}",
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"response_mime_type": "application/json"}
-                },
-                timeout=20.0
+        try:
+            # Run in executor because Vertex AI SDK is synchronous (mostly)
+            # or use async_generate_content if available (newer versions)
+            response = await self.model.generate_content_async(
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
             )
-            response.raise_for_status()
-            data = response.json()
             
-            try:
-                text_content = data["candidates"][0]["content"]["parts"][0]["text"]
-                papers = json.loads(text_content)
-                
-                # Normalize to match Semantic Scholar response structure roughly
-                # We wrap it in the expected dict structure
-                return {
-                    "data": [
-                        {
-                            "paperId": f"gemini-{i}", # Dummy ID
-                            "title": p.get("title"),
-                            "authors": [{"name": a} for a in p.get("authors", [])],
-                            "year": p.get("year"),
-                            "venue": p.get("venue"),
-                            "abstract": p.get("abstract"),
-                            "externalIds": p.get("externalIds", {}),
-                            "citationCount": 0,
-                            "openAccessPdf": None 
-                        }
-                        for i, p in enumerate(papers)
-                    ],
-                    "total": len(papers)
-                }
-            except (KeyError, json.JSONDecodeError) as e:
-                print(f"Gemini Parse Error: {e}")
-                return {"data": [], "total": 0}
+            text_content = response.text
+            papers = json.loads(text_content)
+            
+            # Normalize to match Semantic Scholar response structure roughly
+            # We wrap it in the expected dict structure
+            return {
+                "data": [
+                    {
+                        "paperId": f"gemini-{i}", # Dummy ID
+                        "title": p.get("title"),
+                        "authors": [{"name": a} for a in p.get("authors", [])],
+                        "year": p.get("year"),
+                        "venue": p.get("venue"),
+                        "abstract": p.get("abstract"),
+                        "externalIds": p.get("externalIds", {}),
+                        "citationCount": 0,
+                        "openAccessPdf": p.get("openAccessPdf") 
+                    }
+                    for i, p in enumerate(papers)
+                ],
+                "total": len(papers)
+            }
+        except Exception as e:
+            print(f"Gemini Vertex AI Error: {e}")
+            raise e
 
 # Singleton
 gemini_client = GeminiClient()

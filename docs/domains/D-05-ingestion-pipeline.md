@@ -22,31 +22,40 @@ PDF → テキスト抽出 → セクション分割 → チャンク生成 → 
 | F-0504 | 埋め込み生成・インデックス登録 | Vertex Embedding + Vector Search更新         |
 | F-0505 | 状態更新                       | READY/FAILEDのFirestore反映                  |
 
-## パイプラインフロー
+### 2. Cloud Run Jobs デプロイ
 
+```bash
+# Workerのビルド & デプロイ
+gcloud builds submit --tag gcr.io/PROJECT_ID/paper-ingest-worker ./apps/api
+
+# Job作成 (環境変数は適宜設定)
+gcloud run jobs create paper-ingest-worker \
+  --image gcr.io/PROJECT_ID/paper-ingest-worker \
+  --region asia-northeast1 \
+  --set-env-vars=GCP_PROJECT_ID=PROJECT_ID,GCS_BUCKET_PDF=BUCKET_NAME
 ```
-PDF登録 → Pub/Sub発行 → Worker起動
-  → parser: PDF→テキスト/セクション
-  → chunker: チャンク生成
-  → embedder: ベクトル生成
-  → indexer: Vector Search更新
-  → Firestore: status=READY
-```
 
-## 主要エンティティ
+### 3. トリガー構成 (Phase 1 vs Future)
 
-### PaperIngestJob
+**Phase 1 (Current): Direct Trigger**
+APIサーバーが PDF Upload 完了後に `Cloud Run Client` を使用して直接 Job を起動する。
+これによりインフラ構成を単純化しつつ、非同期処理を実現する。
 
-```
-papers/{paperId}/ingest_jobs/{jobId}
+**Future (Phase 3+): Pub/Sub Trigger**
+システムが大規模化した際、API と Worker の間に Pub/Sub を挟み、Eventarc 等を経由して Job を起動する構成へ移行する。
+コード上は `IngestRequest` インターフェースを共通化し、呼び出し元が変わってもロジックを変更しないように設計する。
+
+### メッセージフォーマット (共通)
+
+Pub/Sub メッセージボディ、または Job 実行時の環境変数/引数として以下の情報を渡す。
+
+```json
 {
-  "paperId": "string",
-  "status": "INGESTING" | "READY" | "FAILED",
-  "startedAt": "timestamp",
-  "finishedAt": "timestamp | null",
-  "error": "string | null",
-  "chunkCount": "number",
-  "requestId": "string"
+    "paperId": "string",
+    "ownerUid": "string",
+    "pdfStoragePath": "papers/{uid}/{paperId}.pdf", // Firebase Storage Path
+    "requestId": "string",
+    "timestamp": "2026-01-01T00:00:00Z"
 }
 ```
 
@@ -78,11 +87,11 @@ papers/{paperId}/chunks/{chunkId}
 
 ```json
 {
-  "paperId": "string",
-  "ownerUid": "string",
-  "pdfUrl": "gs://bucket/path/to/pdf",
-  "requestId": "string",
-  "timestamp": "2026-01-01T00:00:00Z"
+    "paperId": "string",
+    "ownerUid": "string",
+    "pdfUrl": "gs://bucket/path/to/pdf",
+    "requestId": "string",
+    "timestamp": "2026-01-01T00:00:00Z"
 }
 ```
 
@@ -119,6 +128,49 @@ papers/{paperId}/chunks/{chunkId}
 # TODO(F-0503): チャンク生成 | AC: セクション/ページ/オフセットメタ付きチャンク生成 | owner:@
 # TODO(F-0504): 埋め込み+インデックス | AC: Vertex Embedding生成+Vector Search登録 | owner:@
 # TODO(F-0505): 状態更新 | AC: INGESTING→READY/FAILED遷移 | owner:@
+```
+
+## Pub/Sub & Cloud Run Jobs 設定
+
+### 1. Pub/Sub トピック作成
+
+```bash
+# トピック作成
+gcloud pubsub topics create paper.ingest.requested
+```
+
+### 2. Cloud Run Jobs デプロイ
+
+```bash
+# Workerのビルド & デプロイ
+gcloud builds submit --tag gcr.io/PROJECT_ID/paper-ingest-worker ./apps/api
+
+gcloud run jobs create paper-ingest-worker \
+  --image gcr.io/PROJECT_ID/paper-ingest-worker \
+  --region asia-northeast1 \
+  --set-env-vars=GCP_PROJECT_ID=PROJECT_ID,GCS_BUCKET_PDF=BUCKET_NAME
+```
+
+### 3. Eventarc トリガー作成 (Pub/Sub → Cloud Run Jobs)
+
+Cloud Run Jobs は直接 Pub/Sub をトリガーにできないため、**Eventarc** または **Cloud Workflows** を経由するか、
+**Push Subscription** を受け取る **Cloud Run Service (API)** が Job を `Execute` する構成にする。
+本プロジェクトでは **API Service が Pub/Sub を受信し、Job を起動する** 構成、または **API が直接 Job を起動** する簡易構成を採用する。
+
+> **簡易構成案 (Phase 1/2)**:
+> API (`POST /papers`) が PDF Upload 完了後に直接 `Cloud Run Jobs Client` で Job を起動する。
+> Pub/Sub は非同期分離が必要になった段階で導入する。
+
+### メッセージフォーマット (Event)
+
+```json
+{
+    "paperId": "string",
+    "ownerUid": "string",
+    "pdfStoragePath": "papers/{uid}/{paperId}.pdf", // Firebase Storage Path
+    "requestId": "string",
+    "timestamp": "2026-01-01T00:00:00Z"
+}
 ```
 
 ## Cloud Run Jobs 設定
