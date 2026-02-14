@@ -111,8 +111,9 @@ Rules:
 - If uncertain, place papers in "uncertain_items".
 - Keep "score" between 0.0 and 1.0.
 - Write "label", "summary", and "relation_type" in Japanese.
+- Use very short relation labels (1 word preferred) for "relation_type".
 - relation_type examples: "発展", "応用", "比較", "サーベイ", "関連".
-- Add "relation_note" in Japanese (max 1 sentence) for children/related items.
+- Add concise "relation_note" in Japanese (max 2-6 words) for children/related items.
 
 JSON schema:
 {{

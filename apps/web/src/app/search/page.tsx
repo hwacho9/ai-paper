@@ -225,7 +225,7 @@ export default function SearchPage() {
       setResults(data.results);
       setResultMode("list");
       if (data.results.length > 0) {
-        await fetchOrganizedResults(trimmedQuery, searchSource);
+        void fetchOrganizedResults(trimmedQuery, searchSource);
       }
     } catch (err: unknown) {
       console.error(err);
@@ -619,18 +619,18 @@ export default function SearchPage() {
                                       <p className="text-sm">{paper.title}</p>
                                       {(item.relation_type ||
                                         item.relation_note) && (
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                          {item.relation_type
-                                            ? `関係: ${item.relation_type}`
-                                            : ""}
-                                          {item.relation_type &&
-                                          item.relation_note
-                                            ? " / "
-                                            : ""}
-                                          {item.relation_note
-                                            ? item.relation_note
-                                            : ""}
-                                        </p>
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                          {item.relation_type && (
+                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                              {item.relation_type}
+                                            </span>
+                                          )}
+                                          {item.relation_note && (
+                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                              {item.relation_note}
+                                            </span>
+                                          )}
+                                        </div>
                                       )}
                                     </div>
                                     <button
@@ -672,18 +672,18 @@ export default function SearchPage() {
                                       <p className="text-sm">{paper.title}</p>
                                       {(item.relation_type ||
                                         item.relation_note) && (
-                                        <p className="mt-1 text-xs text-muted-foreground">
-                                          {item.relation_type
-                                            ? `関係: ${item.relation_type}`
-                                            : ""}
-                                          {item.relation_type &&
-                                          item.relation_note
-                                            ? " / "
-                                            : ""}
-                                          {item.relation_note
-                                            ? item.relation_note
-                                            : ""}
-                                        </p>
+                                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                                          {item.relation_type && (
+                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                              {item.relation_type}
+                                            </span>
+                                          )}
+                                          {item.relation_note && (
+                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                              {item.relation_note}
+                                            </span>
+                                          )}
+                                        </div>
                                       )}
                                     </div>
                                     <button
