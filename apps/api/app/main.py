@@ -16,6 +16,7 @@ from app.modules.memos.router import router as memos_router
 from app.modules.projects.router import router as projects_router
 from app.modules.keywords.router import router as keywords_router
 from app.modules.related.router import router as related_router
+from app.modules.reading.router import router as reading_router
 
 # TODO: 各ドメインルーターのインポートを追加
 # from app.modules.memos.router import router as memos_router
@@ -52,6 +53,5 @@ app.include_router(memos_router, prefix="/api/v1/memos", tags=["メモ"])
 app.include_router(projects_router, prefix="/api/v1", tags=["プロジェクト"])
 app.include_router(keywords_router, prefix="/api/v1", tags=["キーワード"])
 app.include_router(related_router, prefix="/api/v1", tags=["関連"])
-# TODO: 各ドメインルーターをマウント
-# app.include_router(reading_router, prefix="/api/v1", tags=["読解サポート"])
+app.include_router(reading_router, prefix="/api/v1", tags=["読解サポート"])
 # app.include_router(tex_router, prefix="/api/v1", tags=["TeX"])

@@ -7,6 +7,7 @@
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { apiGet } from "@/lib/api/client";
 import {
     getMemos,
@@ -38,7 +39,32 @@ export default function PaperDetailPage({
 }) {
     const { id } = use(params);
 
-    const [activeTab, setActiveTab] = useState<Tab>("overview");
+    const searchParams = useSearchParams();
+
+    const resolveTab = useCallback((): Tab => {
+        const rawTab = searchParams.get("tab");
+        if (
+            rawTab === "overview" ||
+            rawTab === "pdf" ||
+            rawTab === "memos" ||
+            rawTab === "related"
+        ) {
+            return rawTab;
+        }
+        return "overview";
+    }, [searchParams]);
+
+    const resolvePage = useCallback((): number => {
+        const rawPage = searchParams.get("page");
+        const parsed = rawPage ? Number(rawPage) : NaN;
+        if (!Number.isFinite(parsed) || parsed < 1) {
+            return 1;
+        }
+        return Math.floor(parsed);
+    }, [searchParams]);
+
+    const [activeTab, setActiveTab] = useState<Tab>(resolveTab());
+    const [targetPage, setTargetPage] = useState<number>(resolvePage());
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -58,6 +84,14 @@ export default function PaperDetailPage({
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingCountRef = useRef(0);
     const [keywordsError, setKeywordsError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const nextTab = resolveTab();
+        setActiveTab((prev) => (prev === nextTab ? prev : nextTab));
+
+        const nextPage = resolvePage();
+        setTargetPage((prev) => (prev === nextPage ? prev : nextPage));
+    }, [resolveTab, resolvePage]);
 
     const fetchPaper = useCallback(async () => {
         try {
@@ -315,7 +349,11 @@ export default function PaperDetailPage({
             )}
 
             {activeTab === "pdf" && (
-                <PdfPanel title={paper.title} pdfUrl={paper.pdf_url} />
+                <PdfPanel
+                    title={paper.title}
+                    pdfUrl={paper.pdf_url}
+                    page={targetPage}
+                />
             )}
 
             {activeTab === "memos" && (
