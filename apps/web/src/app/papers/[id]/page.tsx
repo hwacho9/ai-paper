@@ -2,81 +2,38 @@
 
 /**
  * 論文詳細ページ
- * メタデータ + PDFビューアプレースホルダー + メモ + 関連論文
+ * APIからデータ取得 + メモ連携（CRUD）
  */
 
-import { use, useState } from "react";
+import { use, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { apiGet } from "@/lib/api/client";
+import {
+  getMemos,
+  createMemo,
+  updateMemo,
+  deleteMemo,
+  MemoResponse,
+  MemoRef,
+} from "@/lib/api";
 
 type Tab = "overview" | "pdf" | "memos" | "related";
 
-const paper = {
-  title: "Attention Is All You Need",
-  authors: [
-    { name: "Ashish Vaswani", affiliation: "Google Brain" },
-    { name: "Noam Shazeer", affiliation: "Google Brain" },
-    { name: "Niki Parmar", affiliation: "Google Research" },
-    { name: "Jakob Uszkoreit", affiliation: "Google Research" },
-  ],
-  year: 2017,
-  venue: "NeurIPS",
-  abstract:
-    "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train.",
-  doi: "10.48550/arXiv.1706.03762",
-  citationCount: 95000,
-  status: "READY",
-  keywords: ["Transformer", "Self-Attention", "Machine Translation", "NLP"],
-  isLiked: true,
-  pdfUrl: null,
-};
-
-const relatedPapers = [
-  {
-    id: "r1",
-    title: "Sequence to Sequence Learning with Neural Networks",
-    authors: "Sutskever et al.",
-    year: 2014,
-    similarity: 0.92,
-  },
-  {
-    id: "r2",
-    title:
-      "Neural Machine Translation by Jointly Learning to Align and Translate",
-    authors: "Bahdanau et al.",
-    year: 2015,
-    similarity: 0.89,
-  },
-  {
-    id: "2",
-    title: "BERT: Pre-training of Deep Bidirectional Transformers",
-    authors: "Devlin et al.",
-    year: 2019,
-    similarity: 0.87,
-  },
-  {
-    id: "r3",
-    title:
-      "Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context",
-    authors: "Dai et al.",
-    year: 2019,
-    similarity: 0.82,
-  },
-];
-
-const paperMemos = [
-  {
-    id: "1",
-    title: "Self-Attentionの計算量メモ",
-    body: "Self-Attentionの計算量はO(n²d)。シーケンス長nに対して二乗...",
-    updatedAt: "2時間前",
-  },
-  {
-    id: "2",
-    title: "Multi-Head Attentionの直感",
-    body: "ヘッドごとに異なる部分空間で注意を計算する。構文的注意と意味的注意の分離...",
-    updatedAt: "昨日",
-  },
-];
+interface Paper {
+  id: string;
+  title: string;
+  authors: string[];
+  year: number | null;
+  venue: string;
+  abstract: string;
+  doi: string | null;
+  arxiv_id: string | null;
+  pdf_url: string | null;
+  status: string;
+  is_liked: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 export default function PaperDetailPage({
   params,
@@ -85,13 +42,158 @@ export default function PaperDetailPage({
 }) {
   const { id } = use(params);
   const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const [isLiked, setIsLiked] = useState(paper.isLiked);
+  const [paper, setPaper] = useState<Paper | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // メモ関連
+  const [paperMemo, setPaperMemo] = useState<MemoResponse | null>(null);
+  const [memosLoading, setMemosLoading] = useState(false);
+
+  // エディタ状態
+  const [memoTitle, setMemoTitle] = useState("");
+  const [memoBody, setMemoBody] = useState("");
+  const [memoTags, setMemoTags] = useState("");
+  const [memoSaving, setMemoSaving] = useState(false);
+
+  // 論文データ取得
+  const fetchPaper = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await apiGet<Paper>(`/api/v1/library/${id}`);
+      setPaper(data);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "論文の取得に失敗しました");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  // メモ取得（この論文に紐づくもの、1つだけ）
+  const fetchMemo = useCallback(async () => {
+    setMemosLoading(true);
+    try {
+      const data = await getMemos();
+      const related = data.memos.find((m) =>
+        m.refs.some((r) => r.ref_type === "paper" && r.ref_id === id),
+      );
+
+      if (related) {
+        setPaperMemo(related);
+        setMemoTitle(related.title);
+        setMemoBody(related.body);
+        setMemoTags(related.tags.join(", "));
+      } else {
+        setPaperMemo(null);
+        // 新規作成用テンプレート
+        // paperステートがまだセットされていない可能性を考慮
+        setMemoTitle("");
+        setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
+        setMemoTags("");
+      }
+    } catch {
+      setPaperMemo(null);
+    } finally {
+      setMemosLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchPaper();
+    fetchMemo();
+  }, [fetchPaper, fetchMemo]);
+
+  // paper読み込み完了後にタイトルをセット（新規の場合のみ）
+  useEffect(() => {
+    if (paper && !paperMemo && !memoTitle) {
+      setMemoTitle(`Note: ${paper.title}`);
+    }
+  }, [paper, paperMemo, memoTitle]);
+
+  // メモ保存
+  const handleSaveMemo = async () => {
+    if (!memoTitle.trim() && !memoBody.trim()) return;
+    setMemoSaving(true);
+    try {
+      const tags = memoTags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
+      if (paperMemo) {
+        await updateMemo(paperMemo.id, {
+          title: memoTitle.trim(),
+          body: memoBody.trim(),
+          tags,
+        });
+      } else {
+        const refs: MemoRef[] = [{ ref_type: "paper", ref_id: id, note: null }];
+        await createMemo({
+          title: memoTitle.trim(),
+          body: memoBody.trim(),
+          tags,
+          refs,
+        });
+      }
+      await fetchMemo(); // 再取得して状態更新
+      // 保存完了トーストなどを出しても良い
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "保存に失敗しました");
+    } finally {
+      setMemoSaving(false);
+    }
+  };
+
+  // メモ削除
+  const handleDeleteMemo = async () => {
+    if (!paperMemo) return;
+    if (!confirm("このメモを削除しますか？")) return;
+    try {
+      await deleteMemo(paperMemo.id);
+      setPaperMemo(null);
+      // リセット
+      if (paper) setMemoTitle(`Note: ${paper.title}`);
+      setMemoBody("## 概要\n\n\n## 貢献\n- \n\n## 感想・メモ\n");
+      setMemoTags("");
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "削除に失敗しました");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6 animate-pulse">
+        <div className="h-4 w-32 bg-muted/50 rounded" />
+        <div className="glass-card rounded-xl p-6">
+          <div className="h-5 w-48 bg-muted/50 rounded mb-3" />
+          <div className="h-8 w-3/4 bg-muted/50 rounded mb-3" />
+          <div className="h-4 w-1/2 bg-muted/30 rounded" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !paper) {
+    return (
+      <div className="space-y-6">
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-center">
+          <p className="text-red-400">{error || "論文が見つかりません"}</p>
+          <Link
+            href="/library"
+            className="mt-2 inline-block text-sm text-primary hover:underline"
+          >
+            ← ライブラリに戻る
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const tabs = [
     { key: "overview" as Tab, label: "概要" },
     { key: "pdf" as Tab, label: "PDF" },
-    { key: "memos" as Tab, label: "メモ", count: paperMemos.length },
-    { key: "related" as Tab, label: "関連論文", count: relatedPapers.length },
+    { key: "memos" as Tab, label: "メモ" }, // count削除
+    { key: "related" as Tab, label: "関連論文" },
   ];
 
   return (
@@ -122,7 +224,15 @@ export default function PaperDetailPage({
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className="rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-[10px] font-medium text-emerald-400">
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${
+                  paper.status === "READY"
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : paper.status === "INGESTING"
+                      ? "bg-amber-500/20 text-amber-400"
+                      : "bg-muted text-muted-foreground"
+                }`}
+              >
                 {paper.status}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -130,59 +240,26 @@ export default function PaperDetailPage({
               </span>
             </div>
             <h2 className="text-2xl font-bold leading-tight">{paper.title}</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-1">
               {paper.authors.map((a) => (
-                <span key={a.name} className="text-sm text-muted-foreground">
-                  {a.name}
-                  <span className="text-muted-foreground/50">
-                    {" "}
-                    · {a.affiliation}
-                  </span>
-                  {", "}
+                <span key={a} className="text-sm text-muted-foreground">
+                  {a},{" "}
                 </span>
               ))}
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {paper.keywords.map((kw) => (
-                <span
-                  key={kw}
-                  className="rounded-md bg-primary/10 px-2 py-0.5 text-xs text-primary"
-                >
-                  {kw}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <button
-              onClick={() => setIsLiked(!isLiked)}
-              className={`rounded-xl p-3 transition-all hover:scale-110 ${
-                isLiked
-                  ? "bg-red-500/10 text-red-400"
-                  : "bg-muted text-muted-foreground"
-              }`}
-            >
-              <span className="text-xl">{isLiked ? "❤️" : "🤍"}</span>
-            </button>
-            <span className="text-[10px] text-muted-foreground">
-              引用 {(paper.citationCount / 1000).toFixed(1)}k
-            </span>
           </div>
         </div>
-
-        {/* DOI & アクション */}
         <div className="mt-4 flex items-center gap-4 border-t border-border pt-4">
-          <span className="text-xs text-muted-foreground">
-            DOI: {paper.doi}
-          </span>
-          <div className="ml-auto flex gap-2">
-            <button className="rounded-lg bg-muted px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-              プロジェクトに追加
-            </button>
-            <button className="rounded-lg bg-muted px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-              BibTeX コピー
-            </button>
-          </div>
+          {paper.doi && (
+            <span className="text-xs text-muted-foreground">
+              DOI: {paper.doi}
+            </span>
+          )}
+          {paper.arxiv_id && (
+            <span className="text-xs text-muted-foreground">
+              arXiv: {paper.arxiv_id}
+            </span>
+          )}
         </div>
       </div>
 
@@ -199,31 +276,21 @@ export default function PaperDetailPage({
             }`}
           >
             {tab.label}
-            {tab.count !== undefined && (
-              <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] ${
-                  activeTab === tab.key
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {tab.count}
-              </span>
-            )}
           </button>
         ))}
       </div>
 
-      {/* タブコンテンツ */}
+      {/* 概要タブ */}
       {activeTab === "overview" && (
         <div className="glass-card rounded-xl p-6">
           <h3 className="text-lg font-semibold mb-3">Abstract</h3>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            {paper.abstract}
+            {paper.abstract || "(Abstractなし)"}
           </p>
         </div>
       )}
 
+      {/* PDFタブ */}
       {activeTab === "pdf" && (
         <div className="glass-card rounded-xl p-6">
           <div className="flex h-96 items-center justify-center rounded-lg border-2 border-dashed border-border">
@@ -233,79 +300,103 @@ export default function PaperDetailPage({
               </div>
               <p className="text-sm font-medium">PDFビューア</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {paper.pdfUrl
+                {paper.pdf_url
                   ? "PDFを読み込み中..."
                   : "PDFがアップロードされていません"}
               </p>
-              <button className="mt-3 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-all">
-                PDFをアップロード
-              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* メモタブ (インラインエディタ) */}
       {activeTab === "memos" && (
-        <div className="space-y-3">
-          {paperMemos.map((memo) => (
-            <div
-              key={memo.id}
-              className="glass-card rounded-xl p-5 transition-all hover:border-primary/30"
-            >
-              <h4 className="font-medium">{memo.title}</h4>
-              <p className="mt-1 text-sm text-muted-foreground">{memo.body}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                {memo.updatedAt}
-              </p>
+        <div className="glass-card rounded-xl p-6 flex flex-col min-h-[500px]">
+          {memosLoading ? (
+            <div className="animate-pulse space-y-4">
+              <div className="h-8 w-1/3 bg-muted/50 rounded" />
+              <div className="h-64 w-full bg-muted/30 rounded" />
             </div>
-          ))}
-          <button className="w-full rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
-            + メモを追加
-          </button>
+          ) : (
+            <>
+              {/* エディタヘッダー */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold">
+                    {paperMemo ? "メモを編集" : "新しいメモを作成"}
+                  </h3>
+                  {paperMemo && (
+                    <span className="text-xs text-muted-foreground">
+                      最終更新:{" "}
+                      {new Date(paperMemo.updated_at).toLocaleString("ja-JP")}
+                    </span>
+                  )}
+                </div>
+                {paperMemo && (
+                  <button
+                    onClick={handleDeleteMemo}
+                    className="text-xs text-red-400 hover:text-red-500 transition-colors"
+                  >
+                    このメモを削除
+                  </button>
+                )}
+              </div>
+
+              {/* タイトル入力 */}
+              <input
+                type="text"
+                value={memoTitle}
+                onChange={(e) => setMemoTitle(e.target.value)}
+                placeholder="タイトル"
+                className="w-full bg-transparent text-xl font-bold outline-none placeholder:text-muted-foreground/40 mb-4"
+              />
+
+              <div className="border-t border-border mb-4" />
+
+              {/* 本文入力 */}
+              <textarea
+                value={memoBody}
+                onChange={(e) => setMemoBody(e.target.value)}
+                placeholder="Markdownでメモを記述..."
+                className="w-full flex-1 bg-transparent text-sm outline-none resize-none leading-relaxed placeholder:text-muted-foreground/40 font-mono min-h-[300px]"
+              />
+
+              {/* タグ入力 */}
+              <div className="mt-4">
+                <label className="text-xs text-muted-foreground block mb-1">
+                  タグ（カンマ区切り）
+                </label>
+                <input
+                  type="text"
+                  value={memoTags}
+                  onChange={(e) => setMemoTags(e.target.value)}
+                  placeholder="transformer, survey"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+
+              {/* 保存ボタン */}
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={handleSaveMemo}
+                  disabled={
+                    memoSaving || (!memoTitle.trim() && !memoBody.trim())
+                  }
+                  className="rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 shadow-md hover:shadow-lg hover:shadow-primary/20"
+                >
+                  {memoSaving ? "保存中..." : "保存する"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
+      {/* 関連論文タブ */}
       {activeTab === "related" && (
-        <div className="space-y-3">
-          {relatedPapers.map((rp) => (
-            <Link key={rp.id} href={`/papers/${rp.id}`}>
-              <div className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
-                {/* 類似度バー */}
-                <div className="flex flex-col items-center gap-1">
-                  <div className="h-8 w-1.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="w-full rounded-full bg-primary transition-all"
-                      style={{ height: `${rp.similarity * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">
-                    {(rp.similarity * 100).toFixed(0)}%
-                  </span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h4 className="font-medium group-hover:text-primary transition-colors truncate">
-                    {rp.title}
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    {rp.authors} · {rp.year}
-                  </p>
-                </div>
-                <svg
-                  className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M8.25 4.5l7.5 7.5-7.5 7.5"
-                  />
-                </svg>
-              </div>
-            </Link>
-          ))}
+        <div className="text-center py-12 text-muted-foreground">
+          <div className="text-4xl mb-3">🔗</div>
+          <p>関連論文の分析機能は準備中です</p>
         </div>
       )}
     </div>
