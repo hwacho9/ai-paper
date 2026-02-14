@@ -282,11 +282,61 @@ export default function PaperDetailPage({
 
       {/* 概要タブ */}
       {activeTab === "overview" && (
-        <div className="glass-card rounded-xl p-6">
-          <h3 className="text-lg font-semibold mb-3">Abstract</h3>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            {paper.abstract || "(Abstractなし)"}
-          </p>
+        <div className="space-y-4">
+          <div className="glass-card rounded-xl p-6">
+            <h3 className="text-lg font-semibold mb-3">Abstract</h3>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {paper.abstract || "(Abstractなし)"}
+            </p>
+          </div>
+
+          {/* キーワードセクション */}
+          {(paper.keywords?.length > 0 ||
+            paper.prerequisite_keywords?.length > 0) && (
+            <div className="glass-card rounded-xl p-6 space-y-5">
+              {/* 論文キーワード */}
+              {paper.keywords?.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-primary" />
+                    Keywords
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {paper.keywords.map((kw: string, i: number) => (
+                      <span
+                        key={i}
+                        className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+                      >
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 事前知識キーワード */}
+              {paper.prerequisite_keywords?.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+                    Prerequisite Knowledge
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {paper.prerequisite_keywords.map(
+                      (kw: string, i: number) => (
+                        <span
+                          key={i}
+                          className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-400"
+                        >
+                          {kw}
+                        </span>
+                      ),
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
