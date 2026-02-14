@@ -53,6 +53,7 @@ export function AgentChatWidget() {
   const [liveStepIndex, setLiveStepIndex] = useState(0);
   const [pendingActions, setPendingActions] = useState<AgentAction[]>([]);
   const [pendingPlan, setPendingPlan] = useState<string[]>([]);
+  const [pendingByVerdict, setPendingByVerdict] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([
     {
@@ -69,17 +70,17 @@ export function AgentChatWidget() {
       {
         label: "何でも検索してください",
         prompt:
-          "最新の研究トピックを検索して、注目論文を3本ライブラリに保存してください。",
+          "画像認識の最新の研究を検索して、注目論文を3本ライブラリに保存してください。",
       },
       {
         label: "サーベイプロジェクトを作成する",
         prompt:
-          "DNAに関するサーベイ用のプロジェクトを新規作成して、関連研究を3本入れて要約メモを作成してください。",
+          "LLMに関するサーベイ用のプロジェクトを新規作成して、関連研究を3本入れてください。",
       },
       {
-        label: "PDFや画像の分析",
+        label: "現在の論文の分析",
         prompt:
-          "現在の論文に対して要点を抽出し、メモに3行でまとめてください。",
+          "現在の論文に対して要点を抽出し、メモにまとめてください。",
       },
       {
         label: "タスクトラッカーを作成する",
@@ -106,6 +107,7 @@ export function AgentChatWidget() {
     setLiveStepIndex(0);
     setPendingActions([]);
     setPendingPlan([]);
+    setPendingByVerdict(false);
   };
 
   const executePendingTasks = async () => {
@@ -146,6 +148,8 @@ export function AgentChatWidget() {
       setMessages((prev) => [...prev, assistantMessage]);
       setPendingActions(res.pending_actions || []);
       setPendingPlan(res.pending_plan || []);
+      const verdict = res.verification?.verdict;
+      setPendingByVerdict(verdict === "partial" || verdict === "not_met");
       if (!res.pending_actions?.length) {
         setPhase("idle");
         setLivePlan([]);
@@ -194,6 +198,7 @@ export function AgentChatWidget() {
     setLoading(true);
     setPendingActions([]);
     setPendingPlan([]);
+    setPendingByVerdict(false);
     setPhase("planning");
     setLivePlan([]);
     setLiveActions([]);
@@ -242,6 +247,8 @@ export function AgentChatWidget() {
       setMessages((prev) => [...prev, assistantMessage]);
       setPendingActions(res.pending_actions || []);
       setPendingPlan(res.pending_plan || []);
+      const verdict = res.verification?.verdict;
+      setPendingByVerdict(verdict === "partial" || verdict === "not_met");
       if (res.target_path && res.target_path !== pathname) {
         router.push(res.target_path);
       }
@@ -264,6 +271,7 @@ export function AgentChatWidget() {
       setLiveStepIndex(0);
       setLiveActions([]);
       setLivePlan([]);
+      setPendingByVerdict(false);
     } finally {
       if (ticker) clearInterval(ticker);
       setLoading(false);
@@ -472,7 +480,7 @@ export function AgentChatWidget() {
                 ))}
               </div>
             </div>
-            {pendingActions.length > 0 && (
+            {(pendingActions.length > 0 || pendingByVerdict) && (
               <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-xs">
                 <p className="font-medium text-amber-200">未遂のタスクがあります。実行しますか？</p>
                 {pendingPlan.length > 0 && (
@@ -487,7 +495,7 @@ export function AgentChatWidget() {
                   <button
                     type="button"
                     onClick={executePendingTasks}
-                    disabled={loading}
+                    disabled={loading || pendingActions.length === 0}
                     className="rounded-md bg-amber-500 px-2 py-1 text-xs font-medium text-black disabled:opacity-60"
                   >
                     実行する
@@ -497,6 +505,7 @@ export function AgentChatWidget() {
                     onClick={() => {
                       setPendingActions([]);
                       setPendingPlan([]);
+                      setPendingByVerdict(false);
                     }}
                     disabled={loading}
                     className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground disabled:opacity-60"

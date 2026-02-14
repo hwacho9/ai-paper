@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { PdfUploadButton } from "@/components/pdf-upload-button";
 
 type ViewMode = "grid" | "list";
+type SortMode = "title" | "created_desc" | "created_asc";
 
 const statusColors: Record<string, string> = {
     READY: "bg-emerald-500/20 text-emerald-400",
@@ -61,6 +62,7 @@ export default function LibraryPage() {
     const [loading, setLoading] = useState(true);
     const [removingId, setRemovingId] = useState<string | null>(null);
     const [selectedFilter, setSelectedFilter] = useState<string>("すべて");
+    const [sortMode, setSortMode] = useState<SortMode>("title");
     const [question, setQuestion] = useState("");
     const [isAsking, setIsAsking] = useState(false);
     const [askAnswer, setAskAnswer] = useState<string>("");
@@ -245,6 +247,21 @@ export default function LibraryPage() {
         return selectedFilter === statusLabels[status];
     });
 
+    // ソート処理
+    const sortedPapers = [...filteredPapers].sort((a, b) => {
+        if (sortMode === "title") {
+            return a.title.localeCompare(b.title, "ja");
+        }
+
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+        if (sortMode === "created_desc") {
+            return bTime - aTime; // 新しい順
+        }
+        return aTime - bTime; // 古い順
+    });
+
     return (
         <div className="space-y-6">
             {/* ヘッダー */}
@@ -256,6 +273,15 @@ export default function LibraryPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
+                    {/* ソート */}
+                    <select
+                        value={sortMode}
+                        onChange={(e) => setSortMode(e.target.value as SortMode)}
+                        className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-foreground">
+                        <option value="title">タイトル順</option>
+                        <option value="created_desc">追加日: 新しい順</option>
+                        <option value="created_asc">追加日: 古い順</option>
+                    </select>
                     {/* ビュー切替 */}
                     <div className="flex rounded-lg border border-border bg-muted/30">
                         <button
@@ -438,13 +464,13 @@ export default function LibraryPage() {
                         論文を検索する
                     </Link>
                 </div>
-            ) : filteredPapers.length === 0 ? (
+            ) : sortedPapers.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                     <p>このフィルターに該当する論文がありません。</p>
                 </div>
             ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {filteredPapers.map((paper) => (
+                    {sortedPapers.map((paper) => (
                         <div key={paper.id} className="relative group">
                             <Link href={`/papers/${paper.id}`}>
                                 <div className="glass-card h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow flex flex-col">
@@ -525,7 +551,7 @@ export default function LibraryPage() {
             ) : (
                 /* リストビュー */
                 <div className="space-y-2">
-                    {filteredPapers.map((paper) => (
+                    {sortedPapers.map((paper) => (
                         <div key={paper.id} className="relative group">
                             <Link href={`/papers/${paper.id}`}>
                                 <div className="glass-card flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">

@@ -93,6 +93,12 @@ class AgentService:
 
         verification = await self._verify_outcome(req, plan, steps, state)
         state["artifacts"]["verification"] = verification
+        if verification.get("verdict") in {"partial", "not_met"} and not pending_actions:
+            pending_actions = self._derive_pending_actions_for_retry(
+                req=req,
+                plan=plan,
+                steps=steps,
+            )
         target_path = self._decide_target_path(req, plan, steps, state)
         if target_path:
             state["artifacts"]["target_path"] = target_path
@@ -108,6 +114,42 @@ class AgentService:
             pending_actions=pending_actions,
             pending_plan=[self._action_to_todo(a) for a in pending_actions],
         )
+
+    def _derive_pending_actions_for_retry(
+        self,
+        req: AgentChatRequest,
+        plan: AgentPlan,
+        steps: list[AgentStepResult],
+    ) -> list[AgentAction]:
+        # 1) 失敗がある場合は、最初の失敗アクション以降を再実行候補にする
+        failed_action_names = [s.action for s in steps if s.status == "failed"]
+        if failed_action_names:
+            first_failed = failed_action_names[0]
+            for i, action in enumerate(plan.actions):
+                if action.action == first_failed:
+                    return plan.actions[i:]
+
+        # 2) 失敗が無いが partial/not_met の場合は、要求テキストから未遂の可能性が高い操作を抽出
+        text = (req.message or "").lower()
+        wants_summary = ("要約" in req.message) or ("まとめ" in req.message) or ("summary" in text)
+        wants_add = ("追加" in req.message) or ("add" in text)
+
+        if wants_summary:
+            memo_actions = [a for a in plan.actions if a.action == "create_memo_for_last_paper"]
+            if memo_actions:
+                return memo_actions
+
+        if wants_add:
+            add_actions = [
+                a
+                for a in plan.actions
+                if a.action in {"add_last_liked_paper_to_project", "add_paper_to_project"}
+            ]
+            if add_actions:
+                return add_actions
+
+        # 3) 最後のフォールバック
+        return [a for a in plan.actions if a.action in {"create_memo_for_last_paper", "add_last_liked_paper_to_project"}]
 
     async def _make_plan(self, req: AgentChatRequest) -> AgentPlan:
         llm_plan = await self._plan_with_llm(req)
