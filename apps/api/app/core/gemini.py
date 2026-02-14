@@ -5,20 +5,31 @@ import httpx
 import json
 import os
 import uuid
+import logging
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class GeminiClient:
     def __init__(self):
         self.project_id = settings.gcp_project_id
         self.location = settings.gcp_region
         self.model_name = os.getenv("GOOGLE_MODEL_NAME", "gemini-1.5-flash")
+        self.model = None
+        self._init_vertex_ai()
         
-        # Initialize Vertex AI
-        import vertexai
-        vertexai.init(project=self.project_id, location=self.location)
-        
-        from vertexai.generative_models import GenerativeModel
-        self.model = GenerativeModel(self.model_name)
+    def _init_vertex_ai(self):
+        """Vertex AI の初期化（失敗時は None に設定）"""
+        try:
+            import vertexai
+            vertexai.init(project=self.project_id, location=self.location)
+            
+            from vertexai.generative_models import GenerativeModel
+            self.model = GenerativeModel(self.model_name)
+            logger.info("Vertex AI initialized successfully")
+        except Exception as exc:
+            logger.warning(f"Failed to initialize Vertex AI: {exc}. Will use mock suggestions.")
+            self.model = None
 
     async def search_papers(self, query: str, limit: int = 10) -> dict:
         """
@@ -93,6 +104,10 @@ class GeminiClient:
         Returns:
             dict: {"keywords": [...], "prerequisite_keywords": [...]}
         """
+        if not self.model:
+            logger.warning("Vertex AI not available, using fallback suggestions")
+            return {"keywords": [], "prerequisite_keywords": []}
+            
         prompt = f"""You are an academic paper analysis assistant.
 Given the following paper title and abstract, generate two sets of keywords IN ENGLISH:
 
@@ -124,7 +139,7 @@ Example:
                 "prerequisite_keywords": result.get("prerequisite_keywords", [])
             }
         except Exception as e:
-            print(f"Gemini Keyword Generation Error: {e}")
+            logger.warning(f"Gemini Keyword Generation Error: {e}")
             # Return empty on failure (non-blocking)
             return {"keywords": [], "prerequisite_keywords": []}
 

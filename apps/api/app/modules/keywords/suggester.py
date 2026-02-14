@@ -90,6 +90,7 @@ def suggest_keywords_mock(
     """
     論文タイトル/要旨からルールベースでキーワード候補を返す。
     LLM推薦のフォールバック。
+    論文キーワードと事前知識キーワードの両方を返す。
     """
     corpus = f"{title} {abstract}".lower()
     corpus = re.sub(r"\s+", " ", corpus).strip()
@@ -97,7 +98,7 @@ def suggest_keywords_mock(
     suggestions: list[SuggestedKeyword] = []
     used_labels: set[str] = set()
 
-    # 1) ユーザー定義キーワードにマッチするものを優先
+    # 1) ユーザー定義キーワードにマッチするものを優先（論文キーワード）
     for label in owner_keyword_labels:
         label_norm = label.strip().lower()
         if not label_norm or label_norm in used_labels:
@@ -107,12 +108,12 @@ def suggest_keywords_mock(
                 SuggestedKeyword(
                     label=label.strip(),
                     confidence=0.9,
-                    reason="owner keyword match",
+                    reason="llm_paper_keyword",
                 )
             )
             used_labels.add(label_norm)
 
-    # 2) 既定ルールで補完
+    # 2) 既定ルールで論文キーワードを補完
     for label, triggers in DEFAULT_RULES:
         if len(suggestions) >= limit:
             break
@@ -124,19 +125,40 @@ def suggest_keywords_mock(
                 SuggestedKeyword(
                     label=label,
                     confidence=0.75,
-                    reason="rule trigger match",
+                    reason="llm_paper_keyword",
                 )
             )
             used_labels.add(label_norm)
 
-    # 3) 何も引っかからない場合は薄いデフォルト候補
+    # 3) 何も引っかからない場合は薄いデフォルト候補（論文キーワード）
     if not suggestions:
         suggestions.append(
             SuggestedKeyword(
                 label="General",
                 confidence=0.55,
-                reason="fallback",
+                reason="llm_paper_keyword",
             )
         )
 
-    return suggestions[:limit]
+    # 4) 事前知識キーワードを加える（フォールバック）
+    # 一般的な学習基盤となるキーワード群
+    prerequisite_defaults = [
+        "Machine Learning",
+        "Deep Learning",
+        "Neural Networks",
+        "Statistics",
+        "Mathematics",
+    ]
+    
+    for label in prerequisite_defaults:
+        if label.lower() not in used_labels and len(suggestions) < limit * 2:
+            suggestions.append(
+                SuggestedKeyword(
+                    label=label,
+                    confidence=0.60,
+                    reason="llm_prerequisite_keyword",
+                )
+            )
+            used_labels.add(label.lower())
+
+    return suggestions[:limit * 2]
