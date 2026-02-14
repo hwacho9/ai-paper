@@ -1,52 +1,73 @@
 """
 D-06: キーワード & タグ付け - ルーター
-
-TODO(F-0601): キーワードCRUD | AC: 作成/読取/更新/削除が動作 | owner:@
-TODO(F-0602): 論文タグ付け | AC: 論文とキーワードの紐付け/解除 | owner:@
-TODO(F-0603): 自動推薦 | AC: LLM/埋め込みベースのキーワード候補返却 | owner:@
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
+
 from app.core.firebase_auth import get_current_user
-from app.modules.keywords.schemas import KeywordCreate, KeywordResponse
+from app.modules.keywords.schemas import (
+    KeywordCreate,
+    KeywordListResponse,
+    KeywordResponse,
+    KeywordUpdate,
+)
+from app.modules.keywords.service import keyword_service
 
 router = APIRouter()
 
 
-@router.post("/keywords", response_model=KeywordResponse)
-async def create_keyword(body: KeywordCreate, current_user: dict = Depends(get_current_user)):
-    # TODO(F-0601): Firestoreにキーワード作成
-    pass
+@router.post("/keywords", response_model=KeywordResponse, status_code=status.HTTP_201_CREATED)
+async def create_keyword(
+    body: KeywordCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    """キーワード作成"""
+    return await keyword_service.create_keyword(current_user["uid"], body)
 
 
-@router.get("/keywords")
+@router.get("/keywords", response_model=KeywordListResponse)
 async def list_keywords(current_user: dict = Depends(get_current_user)):
-    return []
+    """キーワード一覧"""
+    return await keyword_service.list_keywords(current_user["uid"])
 
 
-@router.patch("/keywords/{keyword_id}")
-async def update_keyword(keyword_id: str, current_user: dict = Depends(get_current_user)):
-    pass
+@router.patch("/keywords/{keyword_id}", response_model=KeywordResponse)
+async def update_keyword(
+    keyword_id: str,
+    body: KeywordUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    """キーワード更新"""
+    return await keyword_service.update_keyword(keyword_id, current_user["uid"], body)
 
 
-@router.delete("/keywords/{keyword_id}")
-async def delete_keyword(keyword_id: str, current_user: dict = Depends(get_current_user)):
-    pass
+@router.delete("/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_keyword(
+    keyword_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """キーワード削除"""
+    await keyword_service.delete_keyword(keyword_id, current_user["uid"])
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/papers/{paper_id}/keywords")
 async def tag_paper(paper_id: str, current_user: dict = Depends(get_current_user)):
     # TODO(F-0602): 論文にキーワードタグ付け
-    pass
+    return {"paper_id": paper_id, "status": "not_implemented"}
 
 
 @router.delete("/papers/{paper_id}/keywords/{keyword_id}")
-async def untag_paper(paper_id: str, keyword_id: str, current_user: dict = Depends(get_current_user)):
-    pass
+async def untag_paper(
+    paper_id: str,
+    keyword_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    # TODO(F-0602): 論文からキーワード解除
+    return {"paper_id": paper_id, "keyword_id": keyword_id, "status": "not_implemented"}
 
 
 @router.post("/papers/{paper_id}/keywords/suggest")
 async def suggest_keywords(paper_id: str, current_user: dict = Depends(get_current_user)):
     """自動キーワード推薦"""
-    # TODO(F-0603): LLM/埋め込みベースの推薦
-    return []
+    return await keyword_service.suggest(paper_id)
