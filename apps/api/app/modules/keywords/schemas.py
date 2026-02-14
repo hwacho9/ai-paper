@@ -44,3 +44,17 @@ class PaperKeywordResponse(BaseModel):
 class PaperKeywordListResponse(BaseModel):
     keywords: list[PaperKeywordResponse]
     total: int
+
+
+class KeywordSuggestionItem(BaseModel):
+    keyword_id: str
+    label: str
+    confidence: float
+    source: str = "auto"
+    reason: str = ""
+
+
+class KeywordSuggestionResponse(BaseModel):
+    paper_id: str
+    suggestions: list[KeywordSuggestionItem]
+    total: int

@@ -38,6 +38,9 @@ class PaperService:
             await self.repository.add_like(uid, paper_id)
             # メモ自動生成トリガー
             await memo_service.create_auto_memo(uid, paper_id, paper_data.title)
+            # キーワード自動推薦（モック）
+            from app.modules.keywords.service import keyword_service
+            await keyword_service.suggest_for_new_library_paper(paper_id, uid)
             
             # Ingestion Trigger (Auto-Ingest)
             # URLがある場合のみトリガー

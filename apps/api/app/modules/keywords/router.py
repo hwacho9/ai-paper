@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Response, status
 
 from app.core.firebase_auth import get_current_user
 from app.modules.keywords.schemas import (
+    KeywordSuggestionResponse,
     PaperKeywordListResponse,
     PaperKeywordResponse,
     PaperKeywordTagCreate,
@@ -84,7 +85,7 @@ async def untag_paper(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/papers/{paper_id}/keywords/suggest")
+@router.post("/papers/{paper_id}/keywords/suggest", response_model=KeywordSuggestionResponse)
 async def suggest_keywords(paper_id: str, current_user: dict = Depends(get_current_user)):
     """自動キーワード推薦"""
-    return await keyword_service.suggest(paper_id)
+    return await keyword_service.suggest_and_apply(paper_id, current_user["uid"])
