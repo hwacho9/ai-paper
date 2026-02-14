@@ -1,6 +1,7 @@
 import type { PaperKeywordResponse } from "@/lib/api";
 import type { Paper } from "../types";
 import { KeywordTagsEditor } from "./keyword-tags-editor";
+import type { KeywordRelatedStatusMap } from "./use-keyword-related-status";
 
 interface PaperHeaderProps {
   paper: Paper;
@@ -9,6 +10,9 @@ interface PaperHeaderProps {
   keywordsError: string | null;
   onAddKeyword: (label: string) => Promise<void>;
   onDeleteKeyword: (keywordId: string) => Promise<void>;
+  onKeywordClick?: (label: string) => void;
+  keywordRelatedStatusMap?: KeywordRelatedStatusMap;
+  keywordRelatedStatusLoading?: boolean;
 }
 
 export function PaperHeader({
@@ -18,6 +22,9 @@ export function PaperHeader({
   keywordsError,
   onAddKeyword,
   onDeleteKeyword,
+  onKeywordClick,
+  keywordRelatedStatusMap,
+  keywordRelatedStatusLoading,
 }: PaperHeaderProps) {
   return (
     <div className="glass-card rounded-xl p-6">
@@ -65,6 +72,9 @@ export function PaperHeader({
         error={keywordsError}
         onAddKeyword={onAddKeyword}
         onDeleteKeyword={onDeleteKeyword}
+        onKeywordClick={onKeywordClick}
+        keywordRelatedStatusMap={keywordRelatedStatusMap}
+        keywordRelatedStatusLoading={keywordRelatedStatusLoading}
       />
     </div>
   );
