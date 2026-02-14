@@ -3,17 +3,24 @@
 /**
  * プロジェクト詳細ページ
  * Firestore からプロジェクトデータを取得して表示
- * タブ切替: 参照論文 / メモ / BibTeX Export
+ * タブ切替: LaTeX / プロジェクト内の文献 / メモ
  */
 
 import { useState, useEffect, useCallback, use, useMemo, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { RotateCw } from "lucide-react";
 import { GraphView } from "./_components/graph-view";
+import {
+    getMemos,
+    createMemo,
+    updateMemo,
+    deleteMemo,
+    type MemoResponse,
+} from "@/lib/api";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
 import { auth } from "@/lib/firebase";
 
-type Tab = "papers" | "latex" | "memos" | "export";
+type Tab = "latex" | "literature" | "memos";
 
 interface Project {
     id: string;
@@ -92,6 +99,16 @@ function makeCiteKey(paperId: string): string {
     return key || "paper";
 }
 
+interface TextRange {
+    start: number;
+    end: number;
+}
+
+function withCacheBust(url: string): string {
+    const sep = url.includes("?") ? "&" : "?";
+    return `${url}${sep}t=${Date.now()}`;
+}
+
 export default function ProjectDetailPage({
     params,
 }: {
@@ -118,13 +135,25 @@ export default function ProjectDetailPage({
     const [texLoading, setTexLoading] = useState(false);
     const [texSaving, setTexSaving] = useState(false);
     const [isCompiling, setIsCompiling] = useState(false);
-    const [filesCollapsed, setFilesCollapsed] = useState(true);
+    const [leftPanelMode, setLeftPanelMode] = useState<"files" | "search" | null>(
+        null,
+    );
     const [compileLog, setCompileLog] = useState<string | null>(null);
+    const [logExpanded, setLogExpanded] = useState(false);
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+    const [docSearchQuery, setDocSearchQuery] = useState("");
+    const [bibtexExpanded, setBibtexExpanded] = useState(false);
     const [latexContent, setLatexContent] = useState(
         "\\section{Introduction}\n\n",
     );
     const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+    const [projectMemos, setProjectMemos] = useState<MemoResponse[]>([]);
+    const [memosLoading, setMemosLoading] = useState(false);
+    const [memoSearchQuery, setMemoSearchQuery] = useState("");
+    const [memoTitle, setMemoTitle] = useState("");
+    const [memoBody, setMemoBody] = useState("");
+    const [memoSaving, setMemoSaving] = useState(false);
+    const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
     const latexEditorRef = useRef<HTMLTextAreaElement>(null);
     const texFileInputRef = useRef<HTMLInputElement>(null);
     const pdfObjectUrlRef = useRef<string | null>(null);
@@ -157,20 +186,6 @@ export default function ProjectDetailPage({
                 }),
             );
 
-            const openAddDialog = async () => {
-                setShowAddDialog(true);
-                setSearchQuery("");
-                setLibraryLoading(true);
-                try {
-                    const data =
-                        await apiGet<LibraryResponse>("/api/v1/library");
-                    setLibraryPapers(data.papers);
-                } catch {
-                    setLibraryPapers([]);
-                } finally {
-                    setLibraryLoading(false);
-                }
-            };
             setPaperDetails(details);
         } catch (e: unknown) {
             const message =
@@ -187,15 +202,85 @@ export default function ProjectDetailPage({
         fetchProject();
     }, [fetchProject]);
 
-    const handleRemovePaper = async (paperId: string) => {
-        if (!confirm("この論文をプロジェクトから削除しますか？")) return;
+    const fetchProjectMemos = useCallback(async () => {
+        setMemosLoading(true);
         try {
-            await apiDelete(`/api/v1/projects/${id}/papers/${paperId}`);
-            setPapers((prev) => prev.filter((p) => p.paper_id !== paperId));
+            const data = await getMemos();
+            const filtered = data.memos
+                .filter((memo) =>
+                    memo.refs.some(
+                        (ref) => ref.ref_type === "project" && ref.ref_id === id,
+                    ),
+                )
+                .sort((a, b) => {
+                    const at = a.updated_at || a.created_at || "";
+                    const bt = b.updated_at || b.created_at || "";
+                    return bt.localeCompare(at);
+                });
+            setProjectMemos(filtered);
+        } catch (e) {
+            console.error("Failed to load project memos", e);
+        } finally {
+            setMemosLoading(false);
+        }
+    }, [id]);
+
+    useEffect(() => {
+        fetchProjectMemos();
+    }, [fetchProjectMemos]);
+
+    const resetMemoEditor = useCallback(() => {
+        setEditingMemoId(null);
+        setMemoTitle("");
+        setMemoBody("");
+    }, []);
+
+    const openMemoEditor = (memo: MemoResponse) => {
+        setEditingMemoId(memo.id);
+        setMemoTitle(memo.title);
+        setMemoBody(memo.body);
+    };
+
+    const handleSaveMemo = async () => {
+        const title = memoTitle.trim();
+        const body = memoBody.trim();
+        if (!title && !body) return;
+        setMemoSaving(true);
+        try {
+            if (editingMemoId) {
+                const current = projectMemos.find((m) => m.id === editingMemoId);
+                await updateMemo(editingMemoId, {
+                    title,
+                    body,
+                    tags: current?.tags || [],
+                });
+            } else {
+                await createMemo({
+                    title,
+                    body,
+                    tags: [],
+                    refs: [{ ref_type: "project", ref_id: id, note: null }],
+                });
+            }
+            await fetchProjectMemos();
+            resetMemoEditor();
         } catch (e: unknown) {
-            const message =
-                e instanceof Error ? e.message : "削除に失敗しました";
-            alert(message);
+            alert(e instanceof Error ? e.message : "メモの保存に失敗しました");
+        } finally {
+            setMemoSaving(false);
+        }
+    };
+
+    const handleDeleteMemo = async (memoId: string) => {
+        if (!confirm("このメモを削除しますか？")) return;
+        try {
+            await deleteMemo(memoId);
+            setProjectMemos((prev) => prev.filter((memo) => memo.id !== memoId));
+            if (editingMemoId === memoId) {
+                resetMemoEditor();
+            }
+        } catch (e: unknown) {
+            alert(e instanceof Error ? e.message : "メモの削除に失敗しました");
         }
     };
 
@@ -282,6 +367,32 @@ export default function ProjectDetailPage({
         textarea.setSelectionRange(start, safeEnd);
     }, []);
 
+    const findPaperRangeInText = useCallback(
+        (text: string, title: string, citeKey: string): TextRange | null => {
+            const safeTitle = title.trim();
+            if (safeTitle.length >= 3) {
+                const titleRegex = new RegExp(escapeRegExp(safeTitle), "i");
+                const titleMatch = titleRegex.exec(text);
+                if (titleMatch && titleMatch.index >= 0) {
+                    return {
+                        start: titleMatch.index,
+                        end: titleMatch.index + titleMatch[0].length,
+                    };
+                }
+            }
+            const cite = `\\cite{${citeKey}}`;
+            const citeIndex = text.indexOf(cite);
+            if (citeIndex >= 0) {
+                return {
+                    start: citeIndex,
+                    end: citeIndex + cite.length,
+                };
+            }
+            return null;
+        },
+        [],
+    );
+
     const handleSelectTexFile = async (path: string) => {
         if (isTextTexFile(selectedTexPath)) {
             await saveCurrentTexFile();
@@ -349,8 +460,8 @@ export default function ProjectDetailPage({
                 `/api/v1/projects/${id}/tex/compile`,
                 { main_file: "main.tex" },
             );
-            setPdfPreviewUrl(compiled.pdf_url);
             setCompileLog(compiled.log || null);
+            await fetchTexPreview();
         } catch (e: unknown) {
             setCompileLog(e instanceof Error ? e.message : "コンパイル失敗");
         } finally {
@@ -424,8 +535,37 @@ export default function ProjectDetailPage({
                 `/api/v1/projects/${id}/tex/file?path=${encodeURIComponent(path)}`,
             );
             setLatexContent(data.content);
+            return data.content;
         },
         [id],
+    );
+
+    const jumpToPaperInMainTex = useCallback(
+        async (meta: { title: string; citeKey: string }) => {
+            let content = latexContent;
+            if (selectedTexPath !== "main.tex") {
+                setSelectedTexPath("main.tex");
+                const loaded = await loadTexFileContent("main.tex");
+                if (typeof loaded === "string") {
+                    content = loaded;
+                }
+            }
+            const range = findPaperRangeInText(content, meta.title, meta.citeKey);
+            if (!range) {
+                alert("main.tex に該当箇所が見つかりませんでした。");
+                return;
+            }
+            requestAnimationFrame(() => {
+                focusEditorRange(range.start, range.end);
+            });
+        },
+        [
+            findPaperRangeInText,
+            focusEditorRange,
+            latexContent,
+            loadTexFileContent,
+            selectedTexPath,
+        ],
     );
 
     const saveCurrentTexFile = useCallback(async () => {
@@ -452,7 +592,7 @@ export default function ProjectDetailPage({
                 URL.revokeObjectURL(pdfObjectUrlRef.current);
                 pdfObjectUrlRef.current = null;
             }
-            setPdfPreviewUrl(data.pdf_url);
+            setPdfPreviewUrl(withCacheBust(data.pdf_url));
             return;
         }
 
@@ -570,33 +710,42 @@ export default function ProjectDetailPage({
         return matches.sort((a, b) => a.start - b.start);
     }, [latexContent, paperMeta]);
 
-    const highlightedPreview = useMemo(() => {
-        if (titleMentionMatches.length === 0) {
-            return latexContent;
+    const docSearchMatches = useMemo(() => {
+        const q = docSearchQuery.trim();
+        if (!q) return [] as Array<{ start: number; end: number; preview: string }>;
+        const regex = new RegExp(escapeRegExp(q), "gi");
+        const hits: Array<{ start: number; end: number; preview: string }> = [];
+        for (const match of latexContent.matchAll(regex)) {
+            const start = match.index ?? -1;
+            if (start < 0) continue;
+            const end = start + match[0].length;
+            const previewStart = Math.max(0, start - 24);
+            const previewEnd = Math.min(latexContent.length, end + 24);
+            hits.push({
+                start,
+                end,
+                preview: latexContent.slice(previewStart, previewEnd).replace(/\n/g, " "),
+            });
+            if (hits.length >= 50) break;
         }
+        return hits;
+    }, [docSearchQuery, latexContent]);
 
-        const nodes = [];
-        let cursor = 0;
-        for (const match of titleMentionMatches) {
-            if (match.start < cursor) continue;
-            if (cursor < match.start) {
-                nodes.push(latexContent.slice(cursor, match.start));
-            }
-            nodes.push(
-                <mark
-                    key={`${match.paperId}-${match.start}`}
-                    className="rounded bg-yellow-300/30 px-0.5 text-foreground"
-                    title={`参照論文に紐づき: ${match.label}`}>
-                    {latexContent.slice(match.start, match.end)}
-                </mark>,
-            );
-            cursor = match.end;
-        }
-        if (cursor < latexContent.length) {
-            nodes.push(latexContent.slice(cursor));
-        }
-        return nodes;
-    }, [latexContent, titleMentionMatches]);
+    const bibtexText = useMemo(() => {
+        if (papers.length === 0) return "論文がありません";
+        return papers
+            .map((p) => {
+                const d = paperDetails.get(p.paper_id);
+                if (!d) return "";
+                const key = d.title
+                    .split(" ")[0]
+                    .toLowerCase()
+                    .replace(/[^a-z]/g, "");
+                return `@article{${key}${d.year || ""},\n  title={${d.title}},\n  author={${d.authors?.join(" and ") || ""}},\n  year={${d.year || ""}}\n}`;
+            })
+            .filter(Boolean)
+            .join("\n\n");
+    }, [paperDetails, papers]);
 
     if (loading) {
         return (
@@ -638,10 +787,16 @@ export default function ProjectDetailPage({
 
     const tabs = [
         { key: "latex" as Tab, label: "LaTeX", count: linkedPaperIds.size },
-        { key: "papers" as Tab, label: "参照論文", count: papers.length },
-        { key: "memos" as Tab, label: "メモ", count: null },
-        { key: "export" as Tab, label: "BibTeX Export", count: null },
+        { key: "literature" as Tab, label: "プロジェクト内の文献", count: papers.length },
+        { key: "memos" as Tab, label: "メモ", count: projectMemos.length },
     ];
+    const filteredProjectMemos = projectMemos.filter((memo) => {
+        if (!memoSearchQuery.trim()) return true;
+        const q = memoSearchQuery.toLowerCase();
+        return (
+            memo.title.toLowerCase().includes(q) || memo.body.toLowerCase().includes(q)
+        );
+    });
 
     return (
         <div className="space-y-6">
@@ -693,75 +848,75 @@ export default function ProjectDetailPage({
                 ))}
             </div>
 
-            {/* タブコンテンツ: 参照論文 */}
-            {activeTab === "papers" && (
-                <div className="space-y-3">
-                    {papers.length === 0 && (
-                        <div className="text-center py-12 text-muted-foreground">
-                            <div className="text-4xl mb-3">📄</div>
-                            <p>まだ論文が追加されていません</p>
-                        </div>
-                    )}
-                    {papers.map((paper) => {
-                        const detail = paperDetails.get(paper.paper_id);
-                        return (
-                            <Link
-                                key={paper.paper_id}
-                                href={`/papers/${paper.paper_id}`}
-                                className="glass-card group flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 cursor-pointer">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-sm font-bold">
-                                    {detail?.year?.toString().slice(-2) || "??"}
-                                </div>
-                                <div className="h-10 w-full bg-muted/30 rounded-xl" />
-                                <div className="space-y-3">
-                                    {[...Array(3)].map((_, i) => (
-                                        <div
-                                            key={i}
-                                            className="glass-card rounded-xl p-4 h-20 bg-muted/20"
-                                        />
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleRemovePaper(paper.paper_id);
-                                    }}
-                                    className="text-muted-foreground/40 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                                    title="削除">
-                                    <svg
-                                        className="h-4 w-4"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        strokeWidth={1.5}
-                                        stroke="currentColor">
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                </button>
-                            </Link>
-                        );
-                    })}
-                    <button
-                        onClick={openAddDialog}
-                        className="w-full rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
-                        + 論文を追加
-                    </button>
-                </div>
-            )}
-
             {/* タブコンテンツ: LaTeX */}
             {activeTab === "latex" && (
                 <div
                     className={`grid gap-4 ${
-                        filesCollapsed
-                            ? "xl:grid-cols-[1fr_1fr]"
-                            : "xl:grid-cols-[260px_1fr_1fr]"
+                        leftPanelMode === null
+                            ? "xl:grid-cols-[40px_1fr_1fr]"
+                            : "xl:grid-cols-[40px_260px_1fr_1fr]"
                     }`}>
-                    {!filesCollapsed && (
+                    <div className="glass-card rounded-xl p-2">
+                        <div className="flex h-full flex-col items-center gap-2">
+                            <button
+                                onClick={() =>
+                                    setLeftPanelMode((prev) =>
+                                        prev === "files" ? null : "files",
+                                    )
+                                }
+                                className={`rounded-md p-2 transition-colors ${
+                                    leftPanelMode === "files"
+                                        ? "bg-primary/20 text-primary"
+                                        : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                }`}
+                                title="Filesを開く">
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={1.8}
+                                    stroke="currentColor">
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M19.5 14.25v-9a2.25 2.25 0 00-2.25-2.25h-7.5L4.5 8.25v10.5A2.25 2.25 0 006.75 21h10.5a2.25 2.25 0 002.25-2.25v-4.5z"
+                                    />
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M9.75 3v5.25H4.5"
+                                    />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() =>
+                                    setLeftPanelMode((prev) =>
+                                        prev === "search" ? null : "search",
+                                    )
+                                }
+                                className={`rounded-md p-2 transition-colors ${
+                                    leftPanelMode === "search"
+                                        ? "bg-primary/20 text-primary"
+                                        : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                }`}
+                                title="検索を開く">
+                                <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth={1.8}
+                                    stroke="currentColor">
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M21 21l-4.35-4.35m1.35-5.4a7.5 7.5 0 11-15 0 7.5 7.5 0 0115 0z"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    {leftPanelMode === "files" && (
                         <div className="glass-card rounded-xl p-4">
                             <div className="mb-3 flex items-center justify-between">
                                 <h4 className="font-semibold">Files</h4>
@@ -774,9 +929,9 @@ export default function ProjectDetailPage({
                                         + Upload
                                     </button>
                                     <button
-                                        onClick={() => setFilesCollapsed(true)}
+                                        onClick={() => setLeftPanelMode(null)}
                                         className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
-                                        折りたたむ
+                                        閉じる
                                     </button>
                                 </div>
                                 <input
@@ -826,6 +981,45 @@ export default function ProjectDetailPage({
                             </div>
                         </div>
                     )}
+                    {leftPanelMode === "search" && (
+                        <div className="glass-card rounded-xl p-4">
+                            <div className="mb-3 flex items-center justify-between">
+                                <h4 className="font-semibold">検索</h4>
+                                <button
+                                    onClick={() => setLeftPanelMode(null)}
+                                    className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+                                    閉じる
+                                </button>
+                            </div>
+                            <input
+                                value={docSearchQuery}
+                                onChange={(e) => setDocSearchQuery(e.target.value)}
+                                placeholder="main.tex 内を検索..."
+                                className="mb-3 w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus:border-primary"
+                            />
+                            <div className="max-h-[520px] space-y-1 overflow-auto">
+                                {docSearchQuery.trim() === "" && (
+                                    <p className="text-xs text-muted-foreground">
+                                        キーワードを入力してください。
+                                    </p>
+                                )}
+                                {docSearchQuery.trim() !== "" &&
+                                    docSearchMatches.length === 0 && (
+                                        <p className="text-xs text-muted-foreground">
+                                            該当箇所がありません。
+                                        </p>
+                                    )}
+                                {docSearchMatches.map((m, idx) => (
+                                    <button
+                                        key={`${m.start}-${idx}`}
+                                        onClick={() => focusEditorRange(m.start, m.end)}
+                                        className="w-full rounded-md border border-border bg-muted/10 px-2 py-1.5 text-left text-[11px] text-muted-foreground hover:border-primary/40 hover:text-foreground">
+                                        {m.preview}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     <div className="glass-card rounded-xl p-4">
                         <div className="mb-3 flex items-center justify-between">
@@ -833,13 +1027,6 @@ export default function ProjectDetailPage({
                                 LaTeX Editor ({selectedTexPath})
                             </h4>
                             <div className="flex items-center gap-2">
-                                {filesCollapsed && (
-                                    <button
-                                        onClick={() => setFilesCollapsed(false)}
-                                        className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
-                                        Filesを開く
-                                    </button>
-                                )}
                                 <span className="text-xs text-muted-foreground">
                                     {lastSavedAt
                                         ? `保存: ${lastSavedAt}`
@@ -886,44 +1073,67 @@ export default function ProjectDetailPage({
                         <div className="glass-card rounded-xl p-4">
                             <div className="mb-3 flex items-center justify-between">
                                 <h4 className="font-semibold">PDF Preview</h4>
-                                <button
-                                    onClick={() => void fetchTexPreview()}
-                                    className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
-                                    Refresh
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() =>
+                                            setLogExpanded((prev) => !prev)
+                                        }
+                                        className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+                                        {logExpanded ? "Log ▲" : "Log ▼"}
+                                    </button>
+                                    <button
+                                        onClick={() => void fetchTexPreview()}
+                                        className="rounded-md border border-border p-1.5 text-muted-foreground hover:text-foreground"
+                                        title="PDFを再読み込み"
+                                        aria-label="PDFを再読み込み">
+                                        <RotateCw className="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                             {pdfPreviewUrl ? (
                                 <iframe
                                     src={pdfPreviewUrl}
-                                    className="h-[360px] w-full rounded-lg border border-border bg-background"
+                                    className="h-[520px] w-full rounded-lg border border-border bg-background"
                                     title="TeX PDF Preview"
                                 />
                             ) : (
-                                <div className="h-[360px] flex items-center justify-center rounded-lg border border-border bg-muted/10 text-xs text-muted-foreground">
+                                <div className="h-[520px] flex items-center justify-center rounded-lg border border-border bg-muted/10 text-xs text-muted-foreground">
                                     まだPDFが生成されていません。Compile PDF
                                     を押してください。
                                 </div>
                             )}
-                            {compileLog && (
-                                <pre className="mt-2 max-h-32 overflow-auto rounded bg-background p-2 text-[10px] text-muted-foreground">
-                                    {compileLog}
-                                </pre>
+                            {logExpanded && (
+                                <div className="mt-2">
+                                    {compileLog ? (
+                                        <pre className="max-h-36 overflow-auto rounded bg-background p-2 text-[10px] text-muted-foreground">
+                                            {compileLog}
+                                        </pre>
+                                    ) : (
+                                        <p className="rounded bg-background p-2 text-[11px] text-muted-foreground">
+                                            ログはまだありません。
+                                        </p>
+                                    )}
+                                </div>
                             )}
                         </div>
 
                         <div className="glass-card rounded-xl p-4">
                             <div className="mb-3 flex items-center justify-between">
                                 <h4 className="font-semibold">
-                                    参照論文との紐づけ
+                                    プロジェクト内の文献
                                 </h4>
-                                <span className="text-xs text-muted-foreground">
-                                    Linked {linkedPaperIds.size}/{papers.length}
-                                </span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">
+                                        Linked {linkedPaperIds.size}/{papers.length}
+                                    </span>
+                                    <button
+                                        onClick={openAddDialog}
+                                        className="rounded-lg border border-dashed border-border px-2 py-1 text-[10px] text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
+                                        + 論文を追加
+                                    </button>
+                                </div>
                             </div>
-                            <pre className="max-h-[180px] overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-3 font-mono text-[11px] leading-5 text-muted-foreground">
-                                {highlightedPreview}
-                            </pre>
-                            <div className="space-y-2 mt-3">
+                            <div className="space-y-2">
                                 {paperMeta.map((meta) => {
                                     const isLinked = linkedPaperIds.has(
                                         meta.paperId,
@@ -941,23 +1151,19 @@ export default function ProjectDetailPage({
                                             }`}>
                                             <div className="flex items-center justify-between gap-2">
                                                 <button
-                                                    onClick={() => {
-                                                        if (firstMatch) {
-                                                            focusEditorRange(
-                                                                firstMatch.start,
-                                                                firstMatch.end,
-                                                            );
-                                                        }
-                                                    }}
+                                                    onClick={() =>
+                                                        void jumpToPaperInMainTex(meta)
+                                                    }
                                                     className="truncate text-left hover:text-primary"
-                                                    title={
-                                                        firstMatch
-                                                            ? "エディタ内の該当箇所へ移動"
-                                                            : "本文中に未出現"
-                                                    }>
+                                                    title="main.tex の該当箇所へジャンプ">
                                                     {meta.title}
                                                 </button>
                                                 <div className="flex items-center gap-1">
+                                                    <Link
+                                                        href={`/papers/${meta.paperId}`}
+                                                        className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
+                                                        paper
+                                                    </Link>
                                                     {firstMatch && (
                                                         <button
                                                             onClick={() =>
@@ -990,56 +1196,203 @@ export default function ProjectDetailPage({
                 </div>
             )}
 
-            {/* タブコンテンツ: メモ */}
-            {activeTab === "memos" && (
-                <div className="text-center py-12 text-muted-foreground">
-                    <div className="text-4xl mb-3">✏️</div>
-                    <p>メモ機能は準備中です</p>
+            {/* タブコンテンツ: プロジェクト内の文献 */}
+            {activeTab === "literature" && (
+                <div className="space-y-4">
+                    <div className="glass-card rounded-xl p-4">
+                        <div className="flex items-center justify-between">
+                            <h4 className="font-semibold">BibTeX Export</h4>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(
+                                            bibtexText,
+                                        );
+                                        alert("BibTeXをコピーしました");
+                                    }}
+                                    className="rounded-md border border-border p-1.5 text-muted-foreground hover:text-foreground"
+                                    title="BibTeXをコピー"
+                                    aria-label="BibTeXをコピー">
+                                    <svg
+                                        className="h-4 w-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        strokeWidth={1.8}
+                                        stroke="currentColor">
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            d="M8.25 7.5V5.625c0-.621.504-1.125 1.125-1.125h8.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125H15.75"
+                                        />
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            d="M6.375 8.25h8.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-8.25A1.125 1.125 0 015.25 17.625v-8.25c0-.621.504-1.125 1.125-1.125z"
+                                        />
+                                    </svg>
+                                </button>
+                                <button
+                                    onClick={() =>
+                                        setBibtexExpanded((prev) => !prev)
+                                    }
+                                    className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">
+                                    {bibtexExpanded ? "閉じる ▲" : "開く ▼"}
+                                </button>
+                            </div>
+                        </div>
+                        {bibtexExpanded && (
+                            <div className="mt-4">
+                                <pre className="rounded-lg bg-background p-4 text-xs text-muted-foreground overflow-x-auto font-mono whitespace-pre-wrap">
+                                    {bibtexText}
+                                </pre>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="space-y-2">
+                        {paperMeta.length === 0 && (
+                            <div className="text-center py-12 text-muted-foreground">
+                                <div className="text-4xl mb-3">📚</div>
+                                <p>プロジェクト内の文献はまだありません</p>
+                            </div>
+                        )}
+                        {paperMeta.map((meta) => {
+                            const detail = paperDetails.get(meta.paperId);
+                            return (
+                                <Link
+                                    key={meta.paperId}
+                                    href={`/papers/${meta.paperId}`}
+                                    className="glass-card group flex items-center gap-3 rounded-xl p-3 transition-all hover:border-primary/40">
+                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                        {detail?.year?.toString().slice(-2) || "??"}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-medium">
+                                            {meta.title}
+                                        </p>
+                                        <p className="truncate text-xs text-muted-foreground">
+                                            {detail?.authors.join(", ") || "Author不明"}
+                                        </p>
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
                 </div>
             )}
 
-            {/* タブコンテンツ: BibTeX Export */}
-            {activeTab === "export" && (
-                <div className="glass-card rounded-xl p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <h4 className="font-semibold">BibTeX</h4>
-                        <button
-                            onClick={() => {
-                                const bibtex = papers
-                                    .map((p) => {
-                                        const d = paperDetails.get(p.paper_id);
-                                        if (!d) return "";
-                                        const key = d.title
-                                            .split(" ")[0]
-                                            .toLowerCase()
-                                            .replace(/[^a-z]/g, "");
-                                        return `@article{${key}${d.year || ""},\n  title={${d.title}},\n  author={${d.authors?.join(" and ") || ""}},\n  year={${d.year || ""}}\n}`;
-                                    })
-                                    .filter(Boolean)
-                                    .join("\n\n");
-                                navigator.clipboard.writeText(bibtex);
-                                alert("BibTeXをコピーしました");
-                            }}
-                            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-all active:scale-95">
-                            コピー
-                        </button>
+            {/* タブコンテンツ: メモ */}
+            {activeTab === "memos" && (
+                <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+                    <div className="glass-card rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                            <h4 className="font-semibold">メモ一覧</h4>
+                            <button
+                                onClick={resetMemoEditor}
+                                className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground">
+                                新規メモ
+                            </button>
+                        </div>
+                        <div className="relative">
+                            <svg
+                                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                strokeWidth={1.5}
+                                stroke="currentColor">
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+                                />
+                            </svg>
+                            <input
+                                value={memoSearchQuery}
+                                onChange={(e) => setMemoSearchQuery(e.target.value)}
+                                placeholder="メモを検索..."
+                                className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:border-primary/40"
+                            />
+                        </div>
+                        <div className="max-h-[580px] space-y-2 overflow-y-auto pr-1">
+                            {memosLoading && (
+                                <p className="py-6 text-center text-sm text-muted-foreground">
+                                    読み込み中...
+                                </p>
+                            )}
+                            {!memosLoading && filteredProjectMemos.length === 0 && (
+                                <p className="py-6 text-center text-sm text-muted-foreground">
+                                    プロジェクトメモはまだありません
+                                </p>
+                            )}
+                            {!memosLoading &&
+                                filteredProjectMemos.map((memo) => {
+                                    const updatedAt = memo.updated_at || memo.created_at;
+                                    return (
+                                        <button
+                                            key={memo.id}
+                                            onClick={() => openMemoEditor(memo)}
+                                            className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                                                editingMemoId === memo.id
+                                                    ? "border-primary/40 bg-primary/5"
+                                                    : "border-border hover:border-primary/30"
+                                            }`}>
+                                            <p className="line-clamp-1 text-sm font-medium">
+                                                {memo.title || "無題のメモ"}
+                                            </p>
+                                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                                {memo.body || "(本文なし)"}
+                                            </p>
+                                            <p className="mt-2 text-[11px] text-muted-foreground">
+                                                {updatedAt
+                                                    ? new Date(updatedAt).toLocaleString("ja-JP")
+                                                    : ""}
+                                            </p>
+                                        </button>
+                                    );
+                                })}
+                        </div>
                     </div>
-                    <pre className="rounded-lg bg-background p-4 text-xs text-muted-foreground overflow-x-auto font-mono whitespace-pre-wrap">
-                        {papers.length === 0
-                            ? "論文がありません"
-                            : papers
-                                  .map((p) => {
-                                      const d = paperDetails.get(p.paper_id);
-                                      if (!d) return "";
-                                      const key = d.title
-                                          .split(" ")[0]
-                                          .toLowerCase()
-                                          .replace(/[^a-z]/g, "");
-                                      return `@article{${key}${d.year || ""},\n  title={${d.title}},\n  author={${d.authors?.join(" and ") || ""}},\n  year={${d.year || ""}}\n}`;
-                                  })
-                                  .filter(Boolean)
-                                  .join("\n\n")}
-                    </pre>
+
+                    <div className="glass-card rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <h4 className="font-semibold">
+                                {editingMemoId ? "メモを編集" : "新しいメモ"}
+                            </h4>
+                            {editingMemoId && (
+                                <button
+                                    onClick={() => handleDeleteMemo(editingMemoId)}
+                                    className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/20">
+                                    削除
+                                </button>
+                            )}
+                        </div>
+                        <input
+                            value={memoTitle}
+                            onChange={(e) => setMemoTitle(e.target.value)}
+                            placeholder="タイトル"
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/40"
+                        />
+                        <textarea
+                            value={memoBody}
+                            onChange={(e) => setMemoBody(e.target.value)}
+                            placeholder="このプロジェクトに関するメモを記録..."
+                            rows={16}
+                            className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary/40"
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                            <button
+                                onClick={resetMemoEditor}
+                                className="rounded-lg border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
+                                クリア
+                            </button>
+                            <button
+                                onClick={handleSaveMemo}
+                                disabled={memoSaving}
+                                className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60">
+                                {memoSaving ? "保存中..." : "保存"}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
