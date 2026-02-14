@@ -74,13 +74,44 @@ papers/{paperId}/keywords/{keywordId}
 ## 実装メモ（F-0603 暫定）
 
 - 現在の `POST /api/v1/papers/:id/keywords/suggest` は **LLMベースの自動推薦** を実装している（Gemini 1.5使用）。
+- Gemini API が利用不可の場合は、**ルールベースのフォールバック** が実行される。
+  - 論文キーワード: タイトル/要旨のテキストマッチングと既定ルール（Transformer, NLP, Computer Vision等）で補完
+  - 事前知識キーワード: Machine Learning, Deep Learning, Neural Networks等の一般的な基盤キーワード
 - 推薦結果は `papers/{paperId}/keywords/{keywordId}` に保存される。
   - `source="auto"`: 自動生成されたタグ。
   - `reason="llm_paper_keyword"`: その論文自体を表すキーワード。
   - `reason="llm_prerequisite_keyword"`: その論文を読むために必要な事前知識キーワード。
-- フロントエンドでは `reason` に基づいて「📄 論文キーワード」「📚 事前知識」として分けて表示する。
 - `manual` タグは保持し、`auto` タグのみ再計算時に一括置換する。
 - ライブラリ追加（Like ON）時にも同じ推薦ロジックを呼び出し、自動タグ付けを行う。
+
+### フロントエンド実装（F-0602関連）
+
+**コンポーネント構成:**
+
+- `KeywordTagsEditor` — キーワード全体レイアウト
+  - `KeywordTagsToolbar` — 削除/保護モードトグル
+  - 📄 **論文キーワード** セクション
+    - キーワードタグ表示（sky色: `border-sky-400/40 bg-sky-400/20 text-sky-200`）
+    - 追加ボタン（+ アイコン）— フォーカスで入力フィールドに変化
+      - `KeywordInputControl (type="paper")`
+  - 📚 **事前知識キーワード** セクション
+    - キーワードタグ表示（amber色: `border-amber-400/40 bg-amber-400/20 text-amber-200`）
+    - 追加ボタン（+ アイコン）— フォーカスで入力フィールドに変化
+      - `KeywordInputControl (type="prerequisite")`
+
+**ユーザー操作フロー:**
+
+1. 論文詳細ページでキーワードセクションを表示
+2. 各キーワード型の + ボタンをクリック → 該当色の入力フィールドが出現
+3. テキスト入力 → Enter で登録、Escape でキャンセル
+4. 入力フィールド外フォーカス喪失 → 自動的に入力フォーム閉じる
+5. 削除モード有効時 → タグをクリックして削除
+
+**タグ表示分類:**
+
+- `reason` フィールドに基づいて自動分類（フロントエンド側）
+  - `reason == "llm_prerequisite_keyword"` → 📚 事前知識セクションに表示
+  - その他（`llm_paper_keyword` または空文字）→ 📄 論文キーワードセクションに表示
 
 ## 実装メモ（ACL移行）
 

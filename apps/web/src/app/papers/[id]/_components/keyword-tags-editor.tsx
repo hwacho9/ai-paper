@@ -23,15 +23,22 @@ export function KeywordTagsEditor({
   const {
     deleteMode,
     deletingKeywordId,
-    keywordInputOpen,
-    keywordDraft,
-    keywordInputRef,
-    setKeywordDraft,
+    paperKeywordInputOpen,
+    paperKeywordDraft,
+    paperKeywordInputRef,
+    setPaperKeywordDraft,
+    openPaperKeywordInput,
+    paperKeywordOnInputKeyDown,
+    paperKeywordOnInputBlur,
+    prerequisiteKeywordInputOpen,
+    prerequisiteKeywordDraft,
+    prerequisiteKeywordInputRef,
+    setPrerequisiteKeywordDraft,
+    openPrerequisiteKeywordInput,
+    prerequisiteKeywordOnInputKeyDown,
+    prerequisiteKeywordOnInputBlur,
     toggleDeleteMode,
-    openInput,
     deleteKeyword,
-    onInputKeyDown,
-    onInputBlur,
   } = useKeywordTagsEditor({ onAddKeyword, onDeleteKeyword });
 
   // キーワードを論文キーワードと事前知識キーワードに分類
@@ -137,6 +144,17 @@ export function KeywordTagsEditor({
               ) : (
                 <span className="text-xs text-muted-foreground/50">なし</span>
               )}
+              {/* 論文キーワード追加ボタン */}
+              <KeywordInputControl
+                inputOpen={paperKeywordInputOpen}
+                draft={paperKeywordDraft}
+                inputRef={paperKeywordInputRef}
+                onChangeDraft={setPaperKeywordDraft}
+                onKeyDown={paperKeywordOnInputKeyDown}
+                onBlur={paperKeywordOnInputBlur}
+                onOpenInput={openPaperKeywordInput}
+                type="paper"
+              />
             </div>
           </div>
 
@@ -151,20 +169,18 @@ export function KeywordTagsEditor({
               ) : (
                 <span className="text-xs text-muted-foreground/50">なし</span>
               )}
+              {/* 事前知識キーワード追加ボタン */}
+              <KeywordInputControl
+                inputOpen={prerequisiteKeywordInputOpen}
+                draft={prerequisiteKeywordDraft}
+                inputRef={prerequisiteKeywordInputRef}
+                onChangeDraft={setPrerequisiteKeywordDraft}
+                onKeyDown={prerequisiteKeywordOnInputKeyDown}
+                onBlur={prerequisiteKeywordOnInputBlur}
+                onOpenInput={openPrerequisiteKeywordInput}
+                type="prerequisite"
+              />
             </div>
-          </div>
-
-          {/* 手動追加 */}
-          <div className="flex flex-wrap items-center gap-2">
-            <KeywordInputControl
-              inputOpen={keywordInputOpen}
-              draft={keywordDraft}
-              inputRef={keywordInputRef}
-              onChangeDraft={setKeywordDraft}
-              onKeyDown={onInputKeyDown}
-              onBlur={onInputBlur}
-              onOpenInput={openInput}
-            />
           </div>
         </div>
       )}
