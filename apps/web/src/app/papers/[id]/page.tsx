@@ -5,16 +5,23 @@
  * APIからデータ取得 + メモ連携（CRUD）
  */
 
-import { use, useState, useEffect, useCallback } from "react";
+import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { Check, Plus, Trash2 } from "lucide-react";
 import { apiGet } from "@/lib/api/client";
 import {
   getMemos,
   createMemo,
   updateMemo,
   deleteMemo,
+  createKeyword,
+  listKeywords,
+  listPaperKeywords,
+  tagPaperKeyword,
+  untagPaperKeyword,
   MemoResponse,
   MemoRef,
+  PaperKeywordResponse,
 } from "@/lib/api";
 
 type Tab = "overview" | "pdf" | "memos" | "related";
@@ -55,6 +62,17 @@ export default function PaperDetailPage({
   const [memoBody, setMemoBody] = useState("");
   const [memoTags, setMemoTags] = useState("");
   const [memoSaving, setMemoSaving] = useState(false);
+
+  // キーワード関連
+  const [paperKeywords, setPaperKeywords] = useState<PaperKeywordResponse[]>([]);
+  const [keywordsLoading, setKeywordsLoading] = useState(false);
+  const [keywordsError, setKeywordsError] = useState<string | null>(null);
+  const [keywordInputOpen, setKeywordInputOpen] = useState(false);
+  const [keywordDraft, setKeywordDraft] = useState("");
+  const [keywordSubmitting, setKeywordSubmitting] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [deletingKeywordId, setDeletingKeywordId] = useState<string | null>(null);
+  const keywordInputRef = useRef<HTMLInputElement>(null);
 
   // 論文データ取得
   const fetchPaper = useCallback(async () => {
@@ -98,10 +116,32 @@ export default function PaperDetailPage({
     }
   }, [id]);
 
+  const fetchPaperKeywords = useCallback(async () => {
+    setKeywordsLoading(true);
+    try {
+      setKeywordsError(null);
+      const data = await listPaperKeywords(id);
+      setPaperKeywords(data.keywords);
+    } catch (e: unknown) {
+      setKeywordsError(
+        e instanceof Error ? e.message : "キーワードの取得に失敗しました",
+      );
+    } finally {
+      setKeywordsLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     fetchPaper();
     fetchMemo();
-  }, [fetchPaper, fetchMemo]);
+    fetchPaperKeywords();
+  }, [fetchPaper, fetchMemo, fetchPaperKeywords]);
+
+  useEffect(() => {
+    if (keywordInputOpen) {
+      keywordInputRef.current?.focus();
+    }
+  }, [keywordInputOpen]);
 
   // paper読み込み完了後にタイトルをセット（新規の場合のみ）
   useEffect(() => {
@@ -157,6 +197,55 @@ export default function PaperDetailPage({
       setMemoTags("");
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : "削除に失敗しました");
+    }
+  };
+
+  const resolveKeywordIdByLabel = async (label: string): Promise<string> => {
+    const keywordList = await listKeywords();
+    const existing = keywordList.keywords.find((k) => k.label === label);
+    if (existing) return existing.id;
+
+    const created = await createKeyword({ label, description: "" });
+    return created.id;
+  };
+
+  const handleAddKeyword = async () => {
+    const label = keywordDraft.trim();
+    if (!label || keywordSubmitting) return;
+
+    const alreadyTagged = paperKeywords.some(
+      (k) => k.label.toLowerCase() === label.toLowerCase(),
+    );
+    if (alreadyTagged) {
+      setKeywordDraft("");
+      setKeywordInputOpen(false);
+      return;
+    }
+
+    setKeywordSubmitting(true);
+    try {
+      const keywordId = await resolveKeywordIdByLabel(label);
+      await tagPaperKeyword(id, { keyword_id: keywordId });
+      await fetchPaperKeywords();
+      setKeywordDraft("");
+      setKeywordInputOpen(false);
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "キーワード追加に失敗しました");
+    } finally {
+      setKeywordSubmitting(false);
+    }
+  };
+
+  const handleDeleteKeyword = async (keywordId: string) => {
+    if (!deleteMode || deletingKeywordId) return;
+    setDeletingKeywordId(keywordId);
+    try {
+      await untagPaperKeyword(id, keywordId);
+      await fetchPaperKeywords();
+    } catch (e: unknown) {
+      alert(e instanceof Error ? e.message : "キーワード削除に失敗しました");
+    } finally {
+      setDeletingKeywordId(null);
     }
   };
 
@@ -259,6 +348,98 @@ export default function PaperDetailPage({
             <span className="text-xs text-muted-foreground">
               arXiv: {paper.arxiv_id}
             </span>
+          )}
+        </div>
+        <div className="mt-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">キーワード</span>
+            <button
+              type="button"
+              onClick={() => setDeleteMode((prev) => !prev)}
+              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors ${
+                deleteMode
+                  ? "border-red-500/50 bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                  : "border-border bg-muted/20 text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {deleteMode ? (
+                <>
+                  <Check className="h-3.5 w-3.5" />
+                  完了
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  削除モード
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {keywordsLoading && (
+              <span className="rounded-md bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
+                読み込み中...
+              </span>
+            )}
+
+            {!keywordsLoading &&
+              paperKeywords.map((keyword) => (
+                <button
+                  key={keyword.keyword_id}
+                  type="button"
+                  onClick={() => handleDeleteKeyword(keyword.keyword_id)}
+                  disabled={!deleteMode || deletingKeywordId === keyword.keyword_id}
+                  className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-all duration-200 ${
+                    deleteMode
+                      ? "border-red-400/60 bg-red-500/15 text-red-300 hover:bg-red-500/25"
+                      : "cursor-default border-sky-400/40 bg-sky-400/20 text-sky-200"
+                  } ${deletingKeywordId === keyword.keyword_id ? "opacity-60" : ""}`}
+                >
+                  {keyword.label}
+                </button>
+              ))}
+
+            {keywordInputOpen ? (
+              <input
+                ref={keywordInputRef}
+                type="text"
+                value={keywordDraft}
+                onChange={(e) => setKeywordDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddKeyword();
+                  }
+                  if (e.key === "Escape") {
+                    setKeywordInputOpen(false);
+                    setKeywordDraft("");
+                  }
+                }}
+                onBlur={() => {
+                  if (!keywordSubmitting && !keywordDraft.trim()) {
+                    setKeywordInputOpen(false);
+                  }
+                }}
+                placeholder="キーワードを入力"
+                className="h-7 w-36 rounded-md border border-sky-400/50 bg-background px-2 text-xs outline-none transition focus:border-sky-300 focus:ring-2 focus:ring-sky-400/30"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteMode(false);
+                  setKeywordInputOpen(true);
+                }}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-sky-400/50 bg-sky-400/15 text-sky-200 transition-colors hover:bg-sky-400/25"
+                aria-label="キーワード追加"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {keywordsError && (
+            <p className="mt-2 text-xs text-red-400">{keywordsError}</p>
           )}
         </div>
       </div>
