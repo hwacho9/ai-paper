@@ -18,7 +18,7 @@ import {
     type MemoResponse,
 } from "@/lib/api";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
-import { auth } from "@/lib/firebase";
+import { getCurrentAuthToken } from "@/lib/firebase";
 
 type Tab = "latex" | "literature" | "memos";
 
@@ -410,7 +410,7 @@ export default function ProjectDetailPage({
     ) => {
         const files = e.target.files;
         if (!files) return;
-        const token = await auth?.currentUser?.getIdToken();
+        const token = await getCurrentAuthToken();
         if (!token) return;
 
         for (const file of Array.from(files)) {
@@ -596,7 +596,7 @@ export default function ProjectDetailPage({
             return;
         }
 
-        const token = await auth?.currentUser?.getIdToken();
+        const token = await getCurrentAuthToken();
         if (!token) {
             setPdfPreviewUrl(null);
             return;
