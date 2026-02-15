@@ -127,8 +127,10 @@ export default function PaperDetailPage({
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingCountRef = useRef(0);
     const [keywordsError, setKeywordsError] = useState<string | null>(null);
-    const { statusMap: keywordRelatedStatusMap, loading: keywordRelatedStatusLoading } =
-        useKeywordRelatedStatus(id, paperKeywords, keywordsLoading);
+    const {
+        statusMap: keywordRelatedStatusMap,
+        loading: keywordRelatedStatusLoading,
+    } = useKeywordRelatedStatus(id, paperKeywords, keywordsLoading);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
     const [linkedProjectIds, setLinkedProjectIds] = useState<string[]>([]);
     const [projectsLoading, setProjectsLoading] = useState(true);
@@ -151,7 +153,9 @@ export default function PaperDetailPage({
             setPaper(data);
             return true;
         } catch (e: unknown) {
-            setError(e instanceof Error ? e.message : "論文の取得に失敗しました");
+            setError(
+                e instanceof Error ? e.message : "論文の取得に失敗しました",
+            );
             return false;
         } finally {
             setLoading(false);
@@ -223,10 +227,12 @@ export default function PaperDetailPage({
         try {
             setProjectsError(null);
             const data = await apiGet<ProjectListResponse>("/api/v1/projects");
-            const projectList: ProjectSummary[] = data.projects.map((project) => ({
-                id: project.id,
-                title: project.title,
-            }));
+            const projectList: ProjectSummary[] = data.projects.map(
+                (project) => ({
+                    id: project.id,
+                    title: project.title,
+                }),
+            );
             setProjects(projectList);
 
             const linkedIds = await Promise.all(
@@ -245,8 +251,9 @@ export default function PaperDetailPage({
             );
 
             setLinkedProjectIds(
-                linkedIds.filter((projectId): projectId is string =>
-                    typeof projectId === "string",
+                linkedIds.filter(
+                    (projectId): projectId is string =>
+                        typeof projectId === "string",
                 ),
             );
         } catch (e: unknown) {
@@ -278,8 +285,14 @@ export default function PaperDetailPage({
             } else {
                 setKeywordsLoading(false);
             }
-        });
+        };
+
+        init();
         fetchProjectMembership();
+
+        return () => {
+            cancelled = true;
+        };
     }, [fetchPaper, fetchMemo, fetchPaperKeywords, fetchProjectMembership]);
 
     // キーワードが0件の場合、ポーリングで生成完了を待つ

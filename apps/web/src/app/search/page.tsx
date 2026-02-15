@@ -77,9 +77,9 @@ function loadSearchPageState(): SearchPageState | null {
             return null;
         }
 
-        const availableSources = SOURCE_OPTIONS.map(
+        const availableSources: string[] = SOURCE_OPTIONS.map(
             (option) => option.value,
-        ) as readonly SearchSource[] | string[];
+        );
         const nextSource = availableSources.includes(
             parsed.searchSource as string,
         )

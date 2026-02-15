@@ -128,38 +128,6 @@ export default function MemosPage() {
     fetchMemos();
   }, [fetchMemos]);
 
-  useEffect(() => {
-    const projectIds = Array.from(
-      new Set(
-        memos
-          .flatMap((memo) => memo.refs)
-          .filter((ref) => ref.ref_type === "project" && ref.ref_id)
-          .map((ref) => ref.ref_id),
-      ),
-    );
-    const [paperKeywordTags, setPaperKeywordTags] = useState<
-        Record<string, MemoPaperKeywordTag[]>
-    >({});
-    const [maxMemoCardHeight, setMaxMemoCardHeight] = useState<number>(0);
-    const memoCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-
-    const fetchMemos = useCallback(async () => {
-        try {
-            setError(null);
-            const data = await getMemos();
-            setMemos(data.memos);
-        } catch (e: unknown) {
-            setError(
-                e instanceof Error ? e.message : "メモの取得に失敗しました",
-            );
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        fetchMemos();
-    }, [fetchMemos]);
 
     useEffect(() => {
         const projectIds = Array.from(
@@ -372,14 +340,6 @@ export default function MemosPage() {
     );
   });
 
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      const heights = filtered
-        .map((memo) => memoCardRefs.current[memo.id]?.offsetHeight || 0)
-        .filter((h) => h > 0);
-      setMaxMemoCardHeight(heights.length ? Math.max(...heights) : 0);
-    });
-
     useEffect(() => {
         const raf = requestAnimationFrame(() => {
             const heights = filtered
@@ -563,162 +523,7 @@ export default function MemosPage() {
         );
     }
 
-    /* ================================================================
-     *  エディタ画面
-     * ================================================================ */
-    if (view.mode === "editor") {
-        const paperRef = view.existingMemo?.refs.find(
-            (r) => r.ref_type === "paper",
-        );
-        const projectRefs = Array.from(
-            new Set(
-                (view.existingMemo?.refs || [])
-                    .filter((r) => r.ref_type === "project" && r.ref_id)
-                    .map((r) => r.ref_id),
-            ),
-        );
-        const paperId = view.paper?.id || paperRef?.ref_id;
-        const paperTitle =
-            view.paper?.title ||
-            view.existingMemo?.title?.replace(/^(Note|Paper):\s*/, "") ||
-            "";
 
-        return (
-            <div className="max-w-2xl mx-auto space-y-4">
-                {/* 戻るバー */}
-                <button
-                  key={paper.id}
-                  onClick={() => selectPaper(paper)}
-                  className="glass-card group w-full text-left flex items-center gap-3 rounded-xl p-4
-                    transition-all hover:border-primary/40 hover:scale-[1.01] focus:outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary text-sm font-bold">
-                    {paper.year?.toString().slice(-2) || "??"}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-medium line-clamp-1 group-hover:text-primary transition-colors">
-                        {paper.title}
-                      </h4>
-                      {hasMemo && (
-                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400">
-                          メモあり
-                        </span>
-                      )}
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    /* ================================================================
-     *  メモ一覧（Scrapbox風グリッド）
-     * ================================================================ */
-    if (loading) {
-        return (
-            <div className="space-y-6">
-                <div className="h-7 w-24 bg-muted/50 rounded animate-pulse" />
-                <div className="h-9 w-full bg-muted/30 rounded-lg animate-pulse" />
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    {[...Array(8)].map((_, i) => (
-                        <div
-                            key={i}
-                            className="glass-card rounded-xl p-4 animate-pulse h-32">
-                            <div className="h-4 w-3/4 bg-muted/50 rounded mb-2" />
-                            <div className="h-3 w-full bg-muted/30 rounded mb-1" />
-                            <div className="h-3 w-2/3 bg-muted/30 rounded" />
-                        </div>
-                    ))}
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-5">
-            {/* ヘッダー */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-2xl font-bold">メモ</h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                        {memos.length} 件
-                    </p>
-                </div>
-                <button
-                    onClick={openPaperPicker}
-                    className="flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-95">
-                    <svg
-                        className="h-4 w-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        strokeWidth={2}
-                        stroke="currentColor">
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M12 4.5v15m7.5-7.5h-15"
-                        />
-                    </svg>
-                    新規メモ
-                </button>
-            </div>
-
-            {/* エラー */}
-            {error && (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-                    {error}
-                    <button
-                        onClick={fetchMemos}
-                        className="ml-2 underline hover:text-red-300">
-                        再試行
-                    </button>
-                </div>
-            )}
-
-            {/* 検索 */}
-            <div className="relative">
-                <svg
-                    className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={1.5}
-                    stroke="currentColor">
-                    <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-                    />
-                  </svg>
-                </button>
-              );
-            })}
-        </div>
-
-        {/* 検索へのリンク */}
-        {!libraryLoading && libraryPapers.length > 0 && (
-          <Link
-            href="/search"
-            className="flex items-center justify-center gap-2 w-full rounded-xl border border-border bg-muted/20 p-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-all"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
-              />
-            </svg>
-            論文を検索して追加する →
-          </Link>
-        )}
-      </div>
-    );
-  }
 
   /* ================================================================
    *  エディタ画面
@@ -870,6 +675,11 @@ export default function MemosPage() {
                 {saving ? "保存中..." : view.existingMemo ? "保存" : "作成"}
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   /* ================================================================
    *  メモ一覧（Scrapbox風グリッド）
@@ -1100,142 +910,37 @@ export default function MemosPage() {
                     </span>
                   </div>
                 </div>
-            ) : (
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                    {filtered.map((memo) => {
-                        const paperRef = memo.refs.find(
-                            (r) => r.ref_type === "paper",
-                        );
-                        const paperTags = paperRef
-                            ? paperKeywordTags[paperRef.ref_id] || []
-                            : [];
-                        const projectIds = Array.from(
-                            new Set(
-                                memo.refs
-                                    .filter(
-                                        (r) =>
-                                            r.ref_type === "project" &&
-                                            r.ref_id,
-                                    )
-                                    .map((r) => r.ref_id),
-                            ),
-                        );
-                        return (
-                            <div key={memo.id} className="relative group">
-                                <div
-                                    ref={(el) => {
-                                        memoCardRefs.current[memo.id] = el;
-                                    }}
-                                    onClick={() => openExistingMemo(memo)}
-                                    onKeyDown={(e) => {
-                                        if (
-                                            e.key === "Enter" ||
-                                            e.key === " "
-                                        ) {
-                                            e.preventDefault();
-                                            openExistingMemo(memo);
-                                        }
-                                    }}
-                                    role="button"
-                                    tabIndex={0}
-                                    style={
-                                        maxMemoCardHeight
-                                            ? {
-                                                  minHeight: `${maxMemoCardHeight}px`,
-                                              }
-                                            : undefined
-                                    }
-                                    className="glass-card w-full cursor-pointer text-left rounded-xl p-4 transition-all duration-200 flex flex-col
-                    hover:scale-[1.03] hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5
-                    focus:outline-none focus:ring-2 focus:ring-primary/30">
-                                    <h4 className="text-sm font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors pr-6">
-                                        {memo.title || "無題のメモ"}
-                                    </h4>
-                                    <p className="mt-1.5 text-xs text-muted-foreground line-clamp-3 leading-relaxed">
-                                        {memo.body || "(本文なし)"}
-                                    </p>
-                                    <div className="mt-2 flex flex-wrap items-center gap-1.5 overflow-hidden">
-                                        {paperRef && (
-                                            <span className="rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary/80">
-                                                論文由来
-                                            </span>
-                                        )}
-                                        {projectIds.length > 0 && (
-                                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-300">
-                                                プロジェクト由来
-                                            </span>
-                                        )}
-                                        {projectIds.map((projectId) => (
-                                            <span
-                                                key={projectId}
-                                                className="rounded-full border border-border bg-muted/30 px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                                                {projectTitles[projectId] ||
-                                                    projectId}
-                                            </span>
-                                        ))}
-                                        {memo.tags
-                                            .filter(
-                                                (tag) =>
-                                                    tag &&
-                                                    tag !== "論文由来" &&
-                                                    tag !== "プロジェクト由来",
-                                            )
-                                            .map((tag) => (
-                                                <span
-                                                    key={`${memo.id}-${tag}`}
-                                                    className="rounded-full border border-border bg-background px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                                                    #{tag}
-                                                </span>
-                                            ))}
-                                        {paperTags.map((tag, idx) => (
-                                            <span
-                                                key={`${memo.id}-paper-tag-${idx}-${tag.label}`}
-                                                className={`rounded-full border px-1.5 py-0.5 text-[9px] ${
-                                                    tag.kind === "prerequisite"
-                                                        ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
-                                                        : "border-violet-500/30 bg-violet-500/10 text-violet-300"
-                                                }`}>
-                                                {tag.label}
-                                            </span>
-                                        ))}
-                                    </div>
-                                    <div className="mt-auto pt-2 flex items-center justify-end gap-2">
-                                        <span className="text-[9px] text-muted-foreground">
-                                            {formatRelativeTime(
-                                                memo.updated_at,
-                                            )}
-                                        </span>
-                                    </div>
-                                </div>
-                                {/* 削除ボタン */}
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDelete(memo.id);
-                                    }}
-                                    className="absolute top-2 right-2 rounded-lg p-1.5 text-muted-foreground/50
+                {/* 削除ボタン */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(memo.id);
+                  }}
+                  className="absolute top-2 right-2 rounded-lg p-1.5 text-muted-foreground/50
                     opacity-0 group-hover:opacity-100
                     hover:bg-red-500/20 hover:text-red-400
                     transition-all z-10"
-                                    title="メモを削除">
-                                    <svg
-                                        className="h-3.5 w-3.5"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        strokeWidth={1.5}
-                                        stroke="currentColor">
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                                        />
-                                    </svg>
-                                </button>
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
+                  title="メモを削除"
+                >
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                    />
+                  </svg>
+                </button>
+              </div>
+            );
+          })}
         </div>
-    );
+      )}
+    </div>
+  );
 }
