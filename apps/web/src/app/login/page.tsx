@@ -248,15 +248,6 @@ export default function LoginPage() {
           )}
         </p>
 
-        {/* ゲストモード */}
-        <div className="text-center">
-          <button
-            onClick={() => router.push("/")}
-            className="text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
-          >
-            ゲストモードで続行 →
-          </button>
-        </div>
       </div>
     </div>
   );
