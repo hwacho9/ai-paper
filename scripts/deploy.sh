@@ -59,7 +59,7 @@ deploy_api() {
     --min-instances 0 \
     --max-instances 10 \
     --timeout 60s \
-    --set-env-vars "^@@^GCP_PROJECT_ID=${PROJECT_ID}@@GCP_REGION=${REGION}@@CORS_ALLOW_ORIGINS=${API_CORS_ORIGINS}" \
+    --set-env-vars "^@@^GCP_PROJECT_ID=${PROJECT_ID}@@GCP_REGION=${REGION}@@CORS_ALLOW_ORIGINS=${API_CORS_ORIGINS}@@GCS_BUCKET_PDF=${GCS_BUCKET_PDF:-}@@GOOGLE_API_KEY=${GOOGLE_API_KEY:-}@@GOOGLE_MODEL_NAME=${GOOGLE_MODEL_NAME:-gemini-2.5-flash}@@PUBMED_API_KEY=${PUBMED_API_KEY:-}@@VECTOR_INDEX_ID=${VECTOR_INDEX_ID:-}@@VECTOR_INDEX_ENDPOINT_ID=${VECTOR_INDEX_ENDPOINT_ID:-}" \
     --service-account "$API_SERVICE_ACCOUNT" \
     --ingress all \
     --allow-unauthenticated \

@@ -31,6 +31,19 @@
 
 ## ローカル起動（Docker Compose）
 
+### 事前準備
+
+1. **Docker** が起動していること
+2. **GCP 認証**（API が Firestore/GCS 等にアクセスするため）
+   ```bash
+   gcloud auth application-default login
+   ```
+3. **環境変数ファイル**
+   - `apps/api/.env` … 存在すること（`apps/api/.env.example` をコピーして編集）
+   - `apps/web/.env.local` … Firebase 設定と `NEXT_PUBLIC_API_URL=http://localhost:8000`
+
+### 起動コマンド
+
 ```bash
 # 全サービス起動（API + Web）
 docker compose up
@@ -45,11 +58,14 @@ docker compose logs -f api
 docker compose down
 ```
 
-- Web: http://localhost:3000
-- API: http://localhost:8000
-- Swagger UI: http://localhost:8000/docs
+- **Web**: http://localhost:3000
+- **API**: http://localhost:8000
+- **Swagger UI**: http://localhost:8000/docs
 
 > ℹ️ ホットリロード有効: `apps/web/src` と `apps/api/app` の変更は自動反映されます。
+
+> **Windows** で API の GCP 認証が通らない場合、`docker-compose.yml` の api の volumes を  
+> `%APPDATA%\gcloud:/root/.config/gcloud:ro` に変更してください。
 
 ## Cloud Run デプロイ
 

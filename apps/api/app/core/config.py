@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     gcp_region: str = "asia-northeast1"
 
     # Firestore
-    firestore_db: str = "default"
+    firestore_db: str = "(default)"
 
     # Cloud Storage
     gcs_bucket_pdf: str = ""
