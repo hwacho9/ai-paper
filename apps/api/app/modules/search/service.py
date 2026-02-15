@@ -158,6 +158,7 @@ class SearchService:
                         abstract=p.get("abstract", ""),
                         external_ids=p.get("externalIds", {}),
                         pdf_url=p.get("openAccessPdf", {}).get("url") if p.get("openAccessPdf") else None,
+                        citation_count=p.get("citationCount"),
                         source="gemini"
                     ))
             else:
@@ -302,7 +303,7 @@ class SearchService:
             doi=result.external_ids.get("DOI"),
             arxiv_id=result.external_ids.get("ArXiv"),
             pdf_url=result.pdf_url,
-            citation_count=0,
+            citation_count=result.citation_count,
             is_in_library=is_in_library
         )
 

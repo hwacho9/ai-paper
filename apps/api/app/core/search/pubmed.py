@@ -90,6 +90,16 @@ class PubmedClient(BaseSearchClient):
 
                 # PDF URL (PubMed doesn't give direct PDF url easily)
                 pdf_url = None
+                citation_count = None
+                for key in ("pmcrefcount", "citedbycount", "citation_count", "citationCount"):
+                    value = item.get(key)
+                    if value is None:
+                        continue
+                    try:
+                        citation_count = int(value)
+                    except (TypeError, ValueError):
+                        citation_count = None
+                    break
                 
                 results.append(SearchResult(
                     title=title,
@@ -99,6 +109,7 @@ class PubmedClient(BaseSearchClient):
                     abstract=abstract,
                     external_ids=external_ids,
                     pdf_url=pdf_url,
+                    citation_count=citation_count,
                     source="pubmed"
                 ))
             return results

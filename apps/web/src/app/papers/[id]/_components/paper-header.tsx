@@ -15,6 +15,45 @@ interface PaperHeaderProps {
   keywordRelatedStatusLoading?: boolean;
 }
 
+const statusColors: Record<"READY" | "PROCESSING" | "FAILED", string> = {
+  READY: "bg-emerald-500/20 text-emerald-400",
+  PROCESSING: "bg-amber-500/20 text-amber-400",
+  FAILED: "bg-red-500/20 text-red-400",
+};
+
+const statusLabels: Record<"READY" | "PROCESSING" | "FAILED", string> = {
+  READY: "完了",
+  PROCESSING: "処理中",
+  FAILED: "失敗",
+};
+
+function getDisplayStatus(
+  paper: Paper,
+  keywords: PaperKeywordResponse[],
+): "READY" | "PROCESSING" | "FAILED" {
+  const hasPaperKeywordsFromTags = keywords.some(
+    (kw) => kw.reason !== "llm_prerequisite_keyword",
+  );
+  const hasPrerequisiteKeywordsFromTags = keywords.some(
+    (kw) => kw.reason === "llm_prerequisite_keyword",
+  );
+  const hasPaperKeywordsFromPaper = Boolean(paper.keywords?.length);
+  const hasPrerequisiteKeywordsFromPaper = Boolean(
+    paper.prerequisite_keywords?.length,
+  );
+  const hasPaperKeywords = hasPaperKeywordsFromTags || hasPaperKeywordsFromPaper;
+  const hasPrerequisiteKeywords =
+    hasPrerequisiteKeywordsFromTags || hasPrerequisiteKeywordsFromPaper;
+
+  if (hasPaperKeywords && hasPrerequisiteKeywords) {
+    return "READY";
+  }
+  if (paper.status === "FAILED") {
+    return "FAILED";
+  }
+  return "PROCESSING";
+}
+
 export function PaperHeader({
   paper,
   keywords,
@@ -26,21 +65,17 @@ export function PaperHeader({
   keywordRelatedStatusMap,
   keywordRelatedStatusLoading,
 }: PaperHeaderProps) {
+  const displayStatus = getDisplayStatus(paper, keywords);
+
   return (
     <div className="glass-card rounded-xl p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
           <div className="mb-2 flex items-center gap-2">
             <span
-              className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${
-                paper.status === "READY"
-                  ? "bg-emerald-500/20 text-emerald-400"
-                  : paper.status === "INGESTING"
-                    ? "bg-amber-500/20 text-amber-400"
-                    : "bg-muted text-muted-foreground"
-              }`}
+              className={`rounded-full px-2.5 py-0.5 text-[10px] font-medium ${statusColors[displayStatus]}`}
             >
-              {paper.status}
+              {statusLabels[displayStatus]}
             </span>
             <span className="text-xs text-muted-foreground">
               {paper.venue} {paper.year}

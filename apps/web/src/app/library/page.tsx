@@ -19,6 +19,24 @@ import { PdfUploadButton } from "@/components/pdf-upload-button";
 
 type ViewMode = "grid" | "list";
 type SortMode = "title" | "created_desc" | "created_asc";
+type LibraryAskCitation = {
+  paper_id: string;
+  chunk_id: string;
+  score: number;
+  page_range: number[];
+  snippet: string;
+};
+
+type LibraryQaState = {
+  question: string;
+  askAnswer: string;
+  askConfidence: number;
+  citations: LibraryAskCitation[];
+  askError: string;
+  expandedPapers: Record<string, boolean>;
+};
+
+const LIBRARY_QA_STATE_KEY = "library-qa-state-v1";
 
 const statusColors: Record<string, string> = {
   READY: "bg-emerald-500/20 text-emerald-400",
@@ -51,30 +69,62 @@ function getPaperStatus(paper: PaperResponse): string {
   return "PROCESSING";
 }
 
+function loadLibraryQaState(): LibraryQaState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = sessionStorage.getItem(LIBRARY_QA_STATE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<LibraryQaState>;
+    if (
+      typeof parsed.question !== "string" ||
+      typeof parsed.askAnswer !== "string" ||
+      typeof parsed.askConfidence !== "number" ||
+      !Array.isArray(parsed.citations) ||
+      typeof parsed.askError !== "string" ||
+      typeof parsed.expandedPapers !== "object" ||
+      parsed.expandedPapers === null
+    ) {
+      return null;
+    }
+    return {
+      question: parsed.question,
+      askAnswer: parsed.askAnswer,
+      askConfidence: parsed.askConfidence,
+      citations: parsed.citations as LibraryAskCitation[],
+      askError: parsed.askError,
+      expandedPapers: parsed.expandedPapers as Record<string, boolean>,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveLibraryQaState(state: LibraryQaState): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(LIBRARY_QA_STATE_KEY, JSON.stringify(state));
+  } catch {
+    console.warn("Failed to save library qa state");
+  }
+}
+
 export default function LibraryPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [papers, setPapers] = useState<PaperResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<string>("すべて");
-  const [sortMode, setSortMode] = useState<SortMode>("title");
+  const [sortMode, setSortMode] = useState<SortMode>("created_desc");
   const [question, setQuestion] = useState("");
   const [isAsking, setIsAsking] = useState(false);
   const [askAnswer, setAskAnswer] = useState<string>("");
   const [askConfidence, setAskConfidence] = useState<number>(0);
-  const [citations, setCitations] = useState<
-    Array<{
-      paper_id: string;
-      chunk_id: string;
-      score: number;
-      page_range: number[];
-      snippet: string;
-    }>
-  >([]);
+  const [citations, setCitations] = useState<LibraryAskCitation[]>([]);
   const [askError, setAskError] = useState("");
   const [expandedPapers, setExpandedPapers] = useState<Record<string, boolean>>(
     {},
   );
+  const [qaStateHydrated, setQaStateHydrated] = useState(false);
   const paperTitleById = useMemo(() => {
     const map = new Map<string, string>();
     for (const paper of papers) {
@@ -141,6 +191,39 @@ export default function LibraryPage() {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    const state = loadLibraryQaState();
+    if (state) {
+      setQuestion(state.question);
+      setAskAnswer(state.askAnswer);
+      setAskConfidence(state.askConfidence);
+      setCitations(state.citations);
+      setAskError(state.askError);
+      setExpandedPapers(state.expandedPapers);
+    }
+    setQaStateHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!qaStateHydrated) return;
+    saveLibraryQaState({
+      question,
+      askAnswer,
+      askConfidence,
+      citations,
+      askError,
+      expandedPapers,
+    });
+  }, [
+    question,
+    askAnswer,
+    askConfidence,
+    citations,
+    askError,
+    expandedPapers,
+    qaStateHydrated,
+  ]);
+
   // ポーリング処理: 処理中の論文がある場合は定期的に更新
   useEffect(() => {
     const hasProcessing = papers.some(
@@ -196,11 +279,7 @@ export default function LibraryPage() {
       setAskAnswer(result.answer);
       setAskConfidence(result.confidence);
       setCitations(result.citations ?? []);
-      const nextExpanded: Record<string, boolean> = {};
-      for (const item of result.citations ?? []) {
-        nextExpanded[item.paper_id] = true;
-      }
-      setExpandedPapers(nextExpanded);
+      setExpandedPapers({});
       toast.success("質問への回答を取得しました");
     } catch (err) {
       console.error(err);
@@ -266,7 +345,23 @@ export default function LibraryPage() {
             {papers.length} 論文
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* ステータスフィルター */}
+          <div className="flex rounded-lg border border-border bg-muted/30 p-0.5">
+            {["すべて", "完了", "処理中", "失敗"].map((f) => (
+              <button
+                key={f}
+                onClick={() => setSelectedFilter(f)}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                  selectedFilter === f
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
           {/* ソート */}
           <select
             value={sortMode}
@@ -325,23 +420,6 @@ export default function LibraryPage() {
             </button>
           </div>
         </div>
-      </div>
-
-      {/* フィルターバー */}
-      <div className="flex flex-wrap gap-2">
-        {["すべて", "完了", "処理中", "失敗"].map((f) => (
-          <button
-            key={f}
-            onClick={() => setSelectedFilter(f)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              selectedFilter === f
-                ? "bg-primary/20 text-primary"
-                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
       </div>
 
       {/* ライブラリQ&A */}
