@@ -508,6 +508,7 @@ export default function MemosPage() {
       ),
     );
     const paperId = view.paper?.id || paperRef?.ref_id;
+    const paperTags = paperId ? paperKeywordTags[paperId] || [] : [];
     const paperTitle =
       view.paper?.title ||
       view.existingMemo?.title?.replace(/^(Note|Paper):\s*/, "") ||
@@ -574,6 +575,24 @@ export default function MemosPage() {
               </svg>
               {paperTitle || "関連論文を見る"}
             </Link>
+          )}
+
+          {/* 論文キーワード / 事前知識キーワード */}
+          {paperTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {paperTags.map((tag, idx) => (
+                <span
+                  key={`editor-paper-tag-${idx}-${tag.label}`}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                    tag.kind === "prerequisite"
+                      ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
+                      : "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                  }`}
+                >
+                  {tag.label}
+                </span>
+              ))}
+            </div>
           )}
 
           {/* タイトル */}
