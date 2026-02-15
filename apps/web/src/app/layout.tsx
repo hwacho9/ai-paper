@@ -15,7 +15,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-    title: "AI Paper Manager — 論文管理サービス",
+    title: "PaperPilot — 論文管理サービス",
     description:
         "論文検索・保存・メモ・関連研究グラフで研究を加速するプラットフォーム",
 };

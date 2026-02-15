@@ -146,7 +146,7 @@ export function AppSidebar() {
           </svg>
         </div>
         <span className="text-lg font-bold tracking-tight gradient-text">
-          AI Paper
+          PaperPilot
         </span>
       </div>
 

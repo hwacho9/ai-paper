@@ -101,7 +101,7 @@ export default function LoginPage() {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold gradient-text">AI Paper Manager</h1>
+          <h1 className="text-2xl font-bold gradient-text">PaperPilot</h1>
           <p className="text-sm text-muted-foreground">
             {mode === "login" ? "アカウントにログイン" : "新規アカウント作成"}
           </p>
