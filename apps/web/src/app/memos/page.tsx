@@ -66,11 +66,14 @@ type ViewState =
       existingMemo: MemoResponse | null;
     };
 
+type MemoOriginFilter = "all" | "paper" | "project";
+
 export default function MemosPage() {
   const [memos, setMemos] = useState<MemoResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [originFilter, setOriginFilter] = useState<MemoOriginFilter>("all");
 
   // ビュー状態
   const [view, setView] = useState<ViewState>({ mode: "list" });
@@ -299,6 +302,12 @@ export default function MemosPage() {
 
   /* ---- フィルタ ---- */
   const filtered = memos.filter((m) => {
+    const hasPaperRef = m.refs.some((r) => r.ref_type === "paper");
+    const hasProjectRef = m.refs.some((r) => r.ref_type === "project");
+
+    if (originFilter === "paper" && !hasPaperRef) return false;
+    if (originFilter === "project" && !hasProjectRef) return false;
+
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -439,7 +448,7 @@ export default function MemosPage() {
                         {paper.title}
                       </h4>
                       {hasMemo && (
-                        <span className="shrink-0 rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                        <span className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-400">
                           メモあり
                         </span>
                       )}
@@ -508,6 +517,7 @@ export default function MemosPage() {
       ),
     );
     const paperId = view.paper?.id || paperRef?.ref_id;
+    const paperTags = paperId ? paperKeywordTags[paperId] || [] : [];
     const paperTitle =
       view.paper?.title ||
       view.existingMemo?.title?.replace(/^(Note|Paper):\s*/, "") ||
@@ -545,7 +555,7 @@ export default function MemosPage() {
                 <Link
                   key={projectId}
                   href={`/projects/${projectId}`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300 hover:bg-amber-500/20 transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-200 transition-colors dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20"
                 >
                   プロジェクトへ: {projectTitles[projectId] || projectId}
                 </Link>
@@ -574,6 +584,24 @@ export default function MemosPage() {
               </svg>
               {paperTitle || "関連論文を見る"}
             </Link>
+          )}
+
+          {/* 論文キーワード / 事前知識キーワード */}
+          {paperTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {paperTags.map((tag, idx) => (
+                <span
+                  key={`editor-paper-tag-${idx}-${tag.label}`}
+                  className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                    tag.kind === "prerequisite"
+                      ? "border-cyan-300 bg-cyan-100 text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300"
+                      : "border-violet-300 bg-violet-100 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300"
+                  }`}
+                >
+                  {tag.label}
+                </span>
+              ))}
+            </div>
           )}
 
           {/* タイトル */}
@@ -722,6 +750,27 @@ export default function MemosPage() {
         />
       </div>
 
+      {/* 絞り込み */}
+      <div className="flex items-center gap-2">
+        {[
+          { key: "all" as const, label: "ALL" },
+          { key: "paper" as const, label: "論文由来" },
+          { key: "project" as const, label: "プロジェクト由来" },
+        ].map((item) => (
+          <button
+            key={item.key}
+            onClick={() => setOriginFilter(item.key)}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              originFilter === item.key
+                ? "border-primary/50 bg-primary/15 text-primary"
+                : "border-border bg-card text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
       {/* 空状態 */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -792,7 +841,7 @@ export default function MemosPage() {
                       </span>
                     )}
                     {projectIds.length > 0 && (
-                      <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] text-amber-300">
+                      <span className="rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
                         プロジェクト由来
                       </span>
                     )}
@@ -824,8 +873,8 @@ export default function MemosPage() {
                         key={`${memo.id}-paper-tag-${idx}-${tag.label}`}
                         className={`rounded-full border px-1.5 py-0.5 text-[9px] ${
                           tag.kind === "prerequisite"
-                            ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
-                            : "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                            ? "border-cyan-300 bg-cyan-100 text-cyan-800 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-300"
+                            : "border-violet-300 bg-violet-100 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300"
                         }`}
                       >
                         {tag.label}

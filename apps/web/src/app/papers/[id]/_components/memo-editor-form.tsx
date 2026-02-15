@@ -106,7 +106,7 @@ export function MemoEditorForm({
                     {paperKws.map((kw) => (
                       <span
                         key={kw.keyword_id}
-                        className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary"
+                        className="rounded-full border border-sky-300 bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-800 dark:border-sky-400/30 dark:bg-primary/10 dark:text-primary"
                       >
                         {kw.label}
                       </span>
@@ -130,7 +130,7 @@ export function MemoEditorForm({
                     {prereqKws.map((kw) => (
                       <span
                         key={kw.keyword_id}
-                        className="rounded-full bg-amber-400/10 px-2.5 py-1 text-xs font-medium text-amber-300"
+                        className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-300"
                       >
                         {kw.label}
                       </span>

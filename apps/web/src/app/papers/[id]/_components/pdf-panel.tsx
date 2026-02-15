@@ -1,9 +1,31 @@
+import { useEffect, useRef } from "react";
+
 interface PdfPanelProps {
   title: string;
   pdfUrl: string | null;
+  page?: number;
 }
 
-export function PdfPanel({ title, pdfUrl }: PdfPanelProps) {
+export function PdfPanel({ title, pdfUrl, page = 1 }: PdfPanelProps) {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const clampPage = page > 0 ? Math.floor(page) : 1;
+
+  const buildPdfViewerUrl = (targetUrl: string) => {
+    const cleanUrl = targetUrl.split("#")[0];
+    const hashParams = new URLSearchParams();
+    hashParams.set("page", String(clampPage));
+
+    return `${cleanUrl}#${hashParams.toString()}`;
+  };
+
+  const pdfViewUrl = pdfUrl ? buildPdfViewerUrl(pdfUrl) : "";
+  const downloadUrl = pdfUrl ? buildPdfViewerUrl(pdfUrl) : "#";
+
+  useEffect(() => {
+    if (!pdfUrl) return;
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [pdfUrl, pdfViewUrl]);
+
   if (!pdfUrl) {
     return (
       <div className="glass-card overflow-hidden rounded-xl">
@@ -23,13 +45,13 @@ export function PdfPanel({ title, pdfUrl }: PdfPanelProps) {
   }
 
   return (
-    <div className="glass-card overflow-hidden rounded-xl">
+    <div ref={rootRef} className="glass-card overflow-hidden rounded-xl">
       <div className="flex items-center justify-between border-b border-border bg-muted/20 px-4 py-2">
         <span className="max-w-[60%] truncate text-xs text-muted-foreground">
           {pdfUrl}
         </span>
         <a
-          href={pdfUrl}
+          href={downloadUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
@@ -51,7 +73,7 @@ export function PdfPanel({ title, pdfUrl }: PdfPanelProps) {
         </a>
       </div>
       <iframe
-        src={pdfUrl}
+        src={pdfViewUrl}
         className="w-full border-0"
         style={{ height: "80vh" }}
         title={`${title} - PDF`}

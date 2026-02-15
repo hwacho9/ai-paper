@@ -81,6 +81,58 @@
 | メソッド | パス                    | 説明     |
 | -------- | ----------------------- | -------- |
 | `GET`    | `/api/v1/search/papers` | 論文検索 |
+| `POST`   | `/api/v1/search/papers/recluster` | 検索結果クラスタ再整理 |
+
+### D-04: `/api/v1/search/papers/recluster` 仕様
+
+- リクエスト
+
+```json
+{
+  "query": "graph neural networks for molecule property prediction",
+  "source": "semantic_scholar",
+  "top_k": 60,
+  "group_target": 4,
+  "include_related": true
+}
+```
+
+- レスポンス
+
+```json
+{
+  "query": "graph neural networks for molecule property prediction",
+  "clusters": [
+    {
+      "cluster_id": "c1",
+      "label": "Message Passing 系",
+      "summary": "分子グラフ上で局所伝播を繰り返す主流系統",
+      "hub_paper": {
+        "paper_id": "paper-001",
+        "title": "Neural Message Passing for Quantum Chemistry",
+        "year": 2017,
+        "source": "semantic_scholar",
+        "score": 0.93,
+        "relation_type": null
+      },
+      "children": [],
+      "related": []
+    }
+  ],
+  "uncertain_items": [],
+  "meta": {
+    "fetched": 60,
+    "latency_ms": 1420,
+    "model": "gemini-2.5-flash",
+    "fallback_used": false
+  }
+}
+```
+
+- 補足
+  - `source` は当面 `auto` / `all` / `arxiv` / `pubmed` / `scholar` / `gemini` を許容。
+  - LLM再整理に失敗した場合は `clusters=[]` とし、`meta.fallback_used=true` を返す。
+  - 既存 `GET /api/v1/search/papers` は互換維持し、フロント側フォールバックに利用する。
 
 ### D-06: キーワード
 
@@ -120,6 +172,42 @@
 | `POST`   | `/api/v1/papers/:id/explain`    | テキスト解釈   |
 | `POST`   | `/api/v1/papers/:id/highlights` | ハイライト保存 |
 | `GET`    | `/api/v1/papers/:id/highlights` | ハイライト一覧 |
+| `POST`   | `/api/v1/library/ask`           | ライブラリRAG検索 |
+
+### D-09: `/api/v1/library/ask` 仕様
+
+- リクエスト
+
+```json
+{
+  "question": "Transformer の主張を要約してください",
+  "paper_ids": ["paper-id-1", "paper-id-2"],
+  "top_k": 5
+}
+```
+
+- レスポンス
+
+```json
+{
+  "answer": "関連する根拠に基づいて要約した回答",
+  "confidence": 0.82,
+  "citations": [
+    {
+      "paper_id": "paper-id-1",
+      "chunk_id": "chunk-id-1",
+      "score": 0.91,
+      "page_range": [2],
+      "snippet": "..."
+    }
+  ]
+}
+```
+
+- 補足
+  - `paper_ids` を空配列または省略すると「ライブラリ内全論文」を対象にします。
+  - 指定した `paper_id` はユーザーのライブラリ所属を検証します。
+  - Vector Searchが利用不可の環境では、トークン一致ベースの簡易検索にフォールバックします。
 
 ### D-10: TeX/BibTeX
 

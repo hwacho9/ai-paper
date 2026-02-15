@@ -1,6 +1,8 @@
 """
 D-03: ペーパーライブラリ - サービス
 """
+import re
+
 from app.modules.papers.repository import PaperRepository
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
 
@@ -9,6 +11,14 @@ from fastapi import UploadFile
 class PaperService:
     def __init__(self):
         self.repository = PaperRepository()
+
+    def _is_likely_pdf_url(self, url: str | None) -> bool:
+        if not url:
+            return False
+        u = url.lower().strip()
+        if ".pdf" in u:
+            return True
+        return bool(re.search(r"(arxiv\.org\/pdf\/)", u))
 
     async def toggle_like(self, uid: str, paper_data: PaperCreate) -> bool:
         """
@@ -48,7 +58,7 @@ class PaperService:
             
             # Ingestion Trigger (Auto-Ingest)
             # URLがある場合のみトリガー
-            if paper_data.pdf_url:
+            if self._is_likely_pdf_url(paper_data.pdf_url):
                 from app.core.cloud_run import execute_ingest_job
                 import uuid
                 request_id = f"auto-{uuid.uuid4()}"

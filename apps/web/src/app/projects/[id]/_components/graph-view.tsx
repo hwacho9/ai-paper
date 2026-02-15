@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { relatedApi, GraphData, Node, Edge } from "@/lib/api/related";
@@ -45,6 +45,17 @@ export function GraphView({
     const [projectQuery, setProjectQuery] = useState("");
     const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
     const [showLibraryNodes, setShowLibraryNodes] = useState(true);
+
+    const fgRef = useRef<any>(null);
+
+    useEffect(() => {
+        if (fgRef.current) {
+            // Apply custom forces
+            fgRef.current.d3Force("charge").strength(-300);
+            fgRef.current.d3Force("link").distance(100);
+            fgRef.current.d3Force("center").strength(0.01);
+        }
+    }, []);
 
     useEffect(() => {
         const updateDimensions = () => {
@@ -128,7 +139,9 @@ export function GraphView({
                     allowedNodeIds.has(edge.source) &&
                     allowedNodeIds.has(edge.target),
             );
-            const nodes = data.nodes.filter((node) => allowedNodeIds.has(node.id));
+            const nodes = data.nodes.filter((node) =>
+                allowedNodeIds.has(node.id),
+            );
 
             return { nodes, links };
         }
@@ -150,7 +163,10 @@ export function GraphView({
                 linkedNodeIds.add(nodeId);
             }
             for (const edge of data.edges) {
-                if (selectedWithFallback.has(edge.source) || selectedWithFallback.has(edge.target)) {
+                if (
+                    selectedWithFallback.has(edge.source) ||
+                    selectedWithFallback.has(edge.target)
+                ) {
                     linkedNodeIds.add(edge.source);
                     linkedNodeIds.add(edge.target);
                 }
@@ -253,7 +269,9 @@ export function GraphView({
                             </p>
                             <input
                                 value={projectQuery}
-                                onChange={(e) => setProjectQuery(e.target.value)}
+                                onChange={(e) =>
+                                    setProjectQuery(e.target.value)
+                                }
                                 placeholder="プロジェクト名"
                                 className="w-36 rounded-md border border-border/70 bg-muted/20 px-2 py-1 text-[11px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                             />
@@ -270,11 +288,15 @@ export function GraphView({
                                     className="flex items-center gap-2 text-xs">
                                     <input
                                         type="checkbox"
-                                        checked={selectedProjects.includes(node.id)}
+                                        checked={selectedProjects.includes(
+                                            node.id,
+                                        )}
                                         onChange={() => toggleProject(node.id)}
                                         className="h-3 w-3"
                                     />
-                                    <span className="truncate">{node.label}</span>
+                                    <span className="truncate">
+                                        {node.label}
+                                    </span>
                                 </label>
                             ))}
                         </div>
@@ -283,6 +305,7 @@ export function GraphView({
             )}
 
             <ForceGraph2D
+                ref={fgRef}
                 width={dimensions.width}
                 height={dimensions.height}
                 graphData={displayData}
@@ -290,14 +313,39 @@ export function GraphView({
                 backgroundColor={isDark ? "#0f172a" : "#f8fafc"}
                 nodeColor={() => "transparent"}
                 nodeRelSize={10}
-                linkColor={() =>
-                    isDark
-                        ? "rgba(148, 163, 184, 0.35)"
-                        : "rgba(30, 41, 59, 0.25)"
-                }
-                linkWidth={(link: Edge) => {
+                // Force engine configuration
+                d3AlphaDecay={0.02}
+                d3VelocityDecay={0.3}
+                cooldownTicks={100}
+                onEngineStop={() => console.log("Engine stopped")}
+                linkWidth={(link: any) => {
                     const score = link.value || 1;
-                    return 0.8 + Math.max(0, Math.min(score, 3));
+                    return 3 + Math.max(0, Math.min(score, 3)) * 1.5;
+                }}
+                linkDirectionalArrowLength={5}
+                linkDirectionalArrowRelPos={0.95}
+                linkDirectionalArrowColor={() =>
+                    isDark ? "rgba(226, 232, 240, 0.9)" : "#334155"
+                }
+                linkDirectionalParticles={1}
+                linkDirectionalParticleWidth={(link: any) => {
+                    const score = link.value || 1;
+                    return 2 + Math.max(0, Math.min(score, 3)) * 0.4;
+                }}
+                linkDirectionalParticleSpeed={0.005}
+                linkDirectionalParticleColor={() =>
+                    isDark ? "rgba(191, 219, 254, 0.9)" : "#1e40af"
+                }
+                linkColor={(link: any) => {
+                    const score = link.value || 1;
+                    // Higher base opacity for better visibility
+                    const alpha = Math.min(
+                        0.95,
+                        0.6 + Math.max(0, score) * 0.2,
+                    );
+                    return isDark
+                        ? `rgba(148, 163, 184, ${alpha})`
+                        : `rgba(30, 41, 59, ${alpha})`;
                 }}
                 onNodeClick={(node: any) => {
                     const nodeId = String(node.id);
@@ -310,36 +358,37 @@ export function GraphView({
                     if (onPaperSelect) onPaperSelect(nodeId);
                 }}
                 nodeCanvasObject={(node: any, ctx, globalScale) => {
-                    const isCenter = mode === "project" && node.id === projectId;
+                    const isCenter =
+                        mode === "project" && node.id === projectId;
                     const isProject = node.group === "project";
                     const isRelated = node.group === "related";
                     const radius = isCenter
                         ? 20 / globalScale
                         : isProject
-                            ? 11 / globalScale
-                            : 7 / globalScale;
+                          ? 11 / globalScale
+                          : 7 / globalScale;
 
                     const glow = isCenter
                         ? "rgba(250, 204, 21, 0.5)"
                         : isProject
-                            ? "rgba(129, 140, 248, 0.35)"
-                            : isRelated
-                              ? "rgba(16, 185, 129, 0.3)"
-                              : "rgba(96, 165, 250, 0.25)";
+                          ? "rgba(129, 140, 248, 0.35)"
+                          : isRelated
+                            ? "rgba(16, 185, 129, 0.3)"
+                            : "rgba(96, 165, 250, 0.25)";
 
                     const fill = isCenter
                         ? "#f59e0b"
                         : isProject
+                          ? isDark
+                              ? "#818cf8"
+                              : "#4f46e5"
+                          : isRelated
                             ? isDark
-                                ? "#818cf8"
-                                : "#4f46e5"
-                            : isRelated
-                                ? isDark
-                                    ? "#34d399"
-                                    : "#16a34a"
-                                : isDark
-                                  ? "#60a5fa"
-                                  : "#3b82f6";
+                                ? "#34d399"
+                                : "#16a34a"
+                            : isDark
+                              ? "#60a5fa"
+                              : "#3b82f6";
 
                     // Glow
                     ctx.beginPath();
@@ -371,25 +420,46 @@ export function GraphView({
                     ctx.stroke();
 
                     const label = node.label || "";
-                    if (globalScale > 1.2 || isCenter || isProject) {
-                        const fontSize = 11 / globalScale;
+                    if (globalScale > 1.1 || isCenter || isProject) {
+                        // Larger font for readability
+                        const fontSize = 14 / globalScale;
                         ctx.font = `${fontSize}px Pretendard, sans-serif`;
+                        const textWidth = ctx.measureText(label).width;
+                        const bckgDimensions = [textWidth, fontSize].map(
+                            (n) => n + fontSize * 0.4,
+                        ); // some padding
+
+                        // Background box for text readability
                         ctx.fillStyle = isDark
-                            ? "rgba(241, 245, 249, 0.94)"
-                            : "rgba(15, 23, 42, 0.94)";
+                            ? "rgba(15, 23, 42, 0.8)"
+                            : "rgba(255, 255, 255, 0.8)";
+
+                        ctx.fillRect(
+                            node.x - bckgDimensions[0] / 2,
+                            node.y + radius + fontSize * 0.2,
+                            bckgDimensions[0],
+                            bckgDimensions[1],
+                        );
+
                         ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.fillStyle = isDark
+                            ? "rgba(255, 255, 255, 0.95)"
+                            : "rgba(0, 0, 0, 0.95)";
+
+                        // Truncate if too long (visual only)
                         const displayLabel =
                             label.length > 20
                                 ? `${label.slice(0, 20)}...`
                                 : label;
+
                         ctx.fillText(
                             displayLabel,
                             node.x,
-                            node.y + radius + fontSize * 1.2,
+                            node.y + radius + fontSize * 0.8,
                         );
                     }
                 }}
-                cooldownTicks={120}
             />
         </div>
     );

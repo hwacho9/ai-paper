@@ -7,7 +7,8 @@
 
 import { use, useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
-import { apiGet } from "@/lib/api/client";
+import { useSearchParams } from "next/navigation";
+import { apiDelete, apiGet, apiPost } from "@/lib/api/client";
 import {
     getMemos,
     createMemo,
@@ -29,7 +30,17 @@ import { PaperTabs } from "./_components/paper-tabs";
 import { OverviewPanel } from "./_components/overview-panel";
 import { PdfPanel } from "./_components/pdf-panel";
 import { RelatedPanel } from "./_components/related-panel";
-import type { Paper, Tab } from "./types";
+import { useKeywordRelatedStatus } from "./_components/use-keyword-related-status";
+import type { Paper, ProjectSummary, Tab } from "./types";
+
+interface ProjectListResponse {
+    projects: Array<ProjectSummary & { paper_count: number }>;
+    total: number;
+}
+
+interface ProjectPaperResponse {
+    paper_id: string;
+}
 
 export default function PaperDetailPage({
     params,
@@ -38,7 +49,36 @@ export default function PaperDetailPage({
 }) {
     const { id } = use(params);
 
-    const [activeTab, setActiveTab] = useState<Tab>("overview");
+    const searchParams = useSearchParams();
+
+    const resolveTab = useCallback((): Tab => {
+        const rawTab = searchParams.get("tab");
+        if (
+            rawTab === "overview" ||
+            rawTab === "pdf" ||
+            rawTab === "memos" ||
+            rawTab === "related"
+        ) {
+            return rawTab;
+        }
+        return "overview";
+    }, [searchParams]);
+
+    const resolvePage = useCallback((): number => {
+        const rawPage = searchParams.get("page");
+        const parsed = rawPage ? Number(rawPage) : NaN;
+        if (!Number.isFinite(parsed) || parsed < 1) {
+            return 1;
+        }
+        return Math.floor(parsed);
+    }, [searchParams]);
+
+    const [activeTab, setActiveTab] = useState<Tab>(resolveTab());
+    const [targetPage, setTargetPage] = useState<number>(resolvePage());
+    const [relatedFocusKeyword, setRelatedFocusKeyword] = useState<string | null>(
+        null,
+    );
+    const [relatedFocusRequestId, setRelatedFocusRequestId] = useState(0);
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -58,6 +98,20 @@ export default function PaperDetailPage({
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingCountRef = useRef(0);
     const [keywordsError, setKeywordsError] = useState<string | null>(null);
+    const { statusMap: keywordRelatedStatusMap, loading: keywordRelatedStatusLoading } =
+        useKeywordRelatedStatus(id, paperKeywords, keywordsLoading);
+    const [projects, setProjects] = useState<ProjectSummary[]>([]);
+    const [linkedProjectIds, setLinkedProjectIds] = useState<string[]>([]);
+    const [projectsLoading, setProjectsLoading] = useState(true);
+    const [projectsError, setProjectsError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const nextTab = resolveTab();
+        setActiveTab((prev) => (prev === nextTab ? prev : nextTab));
+
+        const nextPage = resolvePage();
+        setTargetPage((prev) => (prev === nextPage ? prev : nextPage));
+    }, [resolveTab, resolvePage]);
 
     const fetchPaper = useCallback(async () => {
         try {
@@ -120,6 +174,48 @@ export default function PaperDetailPage({
         }
     }, [id]);
 
+    const fetchProjectMembership = useCallback(async () => {
+        setProjectsLoading(true);
+        try {
+            setProjectsError(null);
+            const data = await apiGet<ProjectListResponse>("/api/v1/projects");
+            const projectList: ProjectSummary[] = data.projects.map((project) => ({
+                id: project.id,
+                title: project.title,
+            }));
+            setProjects(projectList);
+
+            const linkedIds = await Promise.all(
+                projectList.map(async (project) => {
+                    try {
+                        const papers = await apiGet<ProjectPaperResponse[]>(
+                            `/api/v1/projects/${project.id}/papers`,
+                        );
+                        return papers.some((entry) => entry.paper_id === id)
+                            ? project.id
+                            : null;
+                    } catch {
+                        return null;
+                    }
+                }),
+            );
+
+            setLinkedProjectIds(
+                linkedIds.filter((projectId): projectId is string =>
+                    typeof projectId === "string",
+                ),
+            );
+        } catch (e: unknown) {
+            setProjectsError(
+                e instanceof Error
+                    ? e.message
+                    : "所属プロジェクトの取得に失敗しました",
+            );
+        } finally {
+            setProjectsLoading(false);
+        }
+    }, [id]);
+
     useEffect(() => {
         fetchPaper();
         fetchMemo();
@@ -132,7 +228,8 @@ export default function PaperDetailPage({
                 setKeywordsLoading(false);
             }
         });
-    }, [fetchPaper, fetchMemo, fetchPaperKeywords]);
+        fetchProjectMembership();
+    }, [fetchPaper, fetchMemo, fetchPaperKeywords, fetchProjectMembership]);
 
     // キーワードが0件の場合、ポーリングで生成完了を待つ
     useEffect(() => {
@@ -268,6 +365,47 @@ export default function PaperDetailPage({
         }
     };
 
+    const handleKeywordClick = (label: string) => {
+        setRelatedFocusKeyword(label);
+        setRelatedFocusRequestId((prev) => prev + 1);
+        setActiveTab("related");
+    };
+
+    const handleAddProject = async (projectId: string) => {
+        if (linkedProjectIds.includes(projectId)) return;
+        try {
+            await apiPost(`/api/v1/projects/${projectId}/papers`, {
+                paper_id: id,
+                role: "reference",
+                note: "",
+            });
+            setLinkedProjectIds((prev) => [...prev, projectId]);
+        } catch (e: unknown) {
+            alert(
+                e instanceof Error
+                    ? e.message
+                    : "プロジェクトへの追加に失敗しました",
+            );
+            throw e;
+        }
+    };
+
+    const handleDeleteProject = async (projectId: string) => {
+        try {
+            await apiDelete(`/api/v1/projects/${projectId}/papers/${id}`);
+            setLinkedProjectIds((prev) =>
+                prev.filter((linkedId) => linkedId !== projectId),
+            );
+        } catch (e: unknown) {
+            alert(
+                e instanceof Error
+                    ? e.message
+                    : "プロジェクトからの削除に失敗しました",
+            );
+            throw e;
+        }
+    };
+
     if (loading) {
         return (
             <div className="space-y-6 animate-pulse">
@@ -309,6 +447,15 @@ export default function PaperDetailPage({
                 keywordsError={keywordsError}
                 onAddKeyword={handleAddKeyword}
                 onDeleteKeyword={handleDeleteKeyword}
+                onKeywordClick={handleKeywordClick}
+                keywordRelatedStatusMap={keywordRelatedStatusMap}
+                keywordRelatedStatusLoading={keywordRelatedStatusLoading}
+                projects={projects}
+                linkedProjectIds={linkedProjectIds}
+                projectsLoading={projectsLoading}
+                projectsError={projectsError}
+                onAddProject={handleAddProject}
+                onDeleteProject={handleDeleteProject}
             />
 
             <PaperTabs activeTab={activeTab} onChange={setActiveTab} />
@@ -318,7 +465,11 @@ export default function PaperDetailPage({
             )}
 
             {activeTab === "pdf" && (
-                <PdfPanel title={paper.title} pdfUrl={paper.pdf_url} />
+                <PdfPanel
+                    title={paper.title}
+                    pdfUrl={paper.pdf_url}
+                    page={targetPage}
+                />
             )}
 
             {activeTab === "memos" && (
@@ -345,7 +496,13 @@ export default function PaperDetailPage({
                 />
             )}
 
-            {activeTab === "related" && <RelatedPanel paperId={id} />}
+            {activeTab === "related" && (
+                <RelatedPanel
+                    paperId={id}
+                    focusKeyword={relatedFocusKeyword}
+                    focusRequestId={relatedFocusRequestId}
+                />
+            )}
         </div>
     );
 }

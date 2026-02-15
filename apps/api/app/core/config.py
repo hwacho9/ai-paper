@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # LLM Settings
     google_model_name: str = "gemini-2.0-flash"
 
+    # Graph connection strategy
+    graph_connection_mode: str = "keyword"
+
     @property
     def cors_allow_origins_list(self) -> list[str]:
         """CORS許可オリジンをリストで返す"""

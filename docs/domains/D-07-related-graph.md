@@ -56,6 +56,33 @@ graph_snapshots/{snapshotId}
 }
 ```
 
+## 関連度スコアリング（top-N再ランク）
+
+- 目的: ベクトル検索の精度を維持しつつ、再ランク計算コストを抑える。
+
+### ステップ1: ベクトル候補抽出
+- 入力テキストは `Title + Keywords + Abstract` を連結。
+- Vector Search で上位 `VECTOR_FETCH_K` 件（初期値: 50）を取得。
+- この段階は粗い候補の取得として扱う。
+
+### ステップ2: 補助特徴の算出（再ランク対象のみ）
+- 候補内の上位 `TOP_RERANK_CANDIDATES` 件（初期値: 30）に対してのみ再計算。
+- `keyword_overlap`: Jaccard で算出。
+  - `overlap = |A ∩ B| / |A ∪ B|`
+- `citation_score`: 引用数を 0〜1 に正規化。
+  - `citation_score = min(citationCount, 100) / 100`
+  - データ欠損時は `0`。
+
+### ステップ3: 再ランクリアルライス
+- 連結スコア:
+  - `final_score = 0.60 * vector_score + 0.25 * keyword_overlap + 0.15 * citation_score`
+- 最終返却候補は `TOP_N` で上限（既定: 5）。
+
+### 運用ルール
+- 全候補の二次評価を避けるため `VECTOR_FETCH_K -> TOP_RERANK_CANDIDATES -> TOP_N` の 3段階で収束させる。
+- 同点時は `citationCount` 降順、次いで出版年降順で tie-break。
+- エッジ値は最終 `final_score` を利用し、重複エッジは既存仕様に従い除外。
+
 ## API仕様
 
 | メソッド | パス                          | 説明                              |
@@ -81,12 +108,13 @@ graph_snapshots/{snapshotId}
 
 - 1次: オンデマンド（要求時に計算/キャッシュ）
 - 2次: パイプライン完了イベント（`paper.ingest.completed`）で事前計算
+- 上記 top-N 再ランクを導入すると、推薦とグラフ生成ともコスト/遅延が上がりにくくなる。
 - UIからは複数の関連論文を選択し、`POST /projects/:id/papers` を繰り返し呼んで紐付け
 
 ## TODO一覧
 
 ```python
-# TODO(F-0701): 関連論文推薦 | AC: ベクトル類似度ベースの関連論文リスト返却 | owner:@
+# TODO(F-0701): 関連論文推薦 | AC: ベクトル再取得(top-N) + キーワード重ね合わせ + 引用補正で関連論文を返却 | owner:@
 # TODO(F-0702): グラフデータ | AC: ノード/エッジJSONの生成・返却 | owner:@
 # TODO(F-0703): グラフ再構成 | AC: フィルター基準によるグラフ再構成 | owner:@
 # TODO(F-0704): プロジェクト追加 | AC: 関連論文をプロジェクト参照に追加 | owner:@

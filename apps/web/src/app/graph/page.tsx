@@ -6,9 +6,10 @@
  * Canvas/SVGベースのネットワークビジュアライゼーション
  */
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { relatedApi } from "@/lib/api/related";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { GraphConnectionMode, relatedApi } from "@/lib/api/related";
+import { apiDelete, apiGet, apiPost } from "@/lib/api/client";
 
 // ノードデータ（内部用）
 interface GraphNode {
@@ -29,8 +30,13 @@ interface GraphEdge {
     strength: number;
 }
 
+interface PaperTitleResponse {
+    title: string;
+}
+
 export default function GraphPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     // State for Real Data
@@ -43,12 +49,29 @@ export default function GraphPage() {
     const [showMyPapers, setShowMyPapers] = useState(true);
     const [showRelated, setShowRelated] = useState(true);
     const [showProjects, setShowProjects] = useState(true);
+    const requestedMode = searchParams.get("mode");
+    const connectionMode: GraphConnectionMode =
+        requestedMode === "embedding" ||
+        requestedMode === "keyword" ||
+        requestedMode === "hybrid"
+            ? requestedMode
+            : "keyword";
 
     const nodesRef = useRef<GraphNode[]>([]); // Ref for animation loop
     const edgesRef = useRef<GraphEdge[]>([]); // Ref for animation loop
 
     const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
     const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+    const selectedNodeRef = useRef<GraphNode | null>(null);
+    const hoveredNodeRef = useRef<string | null>(null);
+    const [selectedProjectId, setSelectedProjectId] = useState("");
+    const [projectActionLoading, setProjectActionLoading] = useState<{
+        type: "add" | "remove";
+        projectId: string;
+    } | null>(null);
+    const [paperTitleMap, setPaperTitleMap] = useState<Record<string, string>>(
+        {},
+    );
     const animationRef = useRef<number>(0);
     const dragRef = useRef<{
         nodeId: string | null;
@@ -56,12 +79,20 @@ export default function GraphPage() {
         offsetY: number;
     }>({ nodeId: null, offsetX: 0, offsetY: 0 });
 
+    useEffect(() => {
+        selectedNodeRef.current = selectedNode;
+    }, [selectedNode]);
+
+    useEffect(() => {
+        hoveredNodeRef.current = hoveredNode;
+    }, [hoveredNode]);
+
     // 1. Fetch Data
     useEffect(() => {
         const loadGraph = async () => {
             setLoading(true);
             try {
-                const data = await relatedApi.getGlobalGraph();
+                const data = await relatedApi.getGlobalGraph(connectionMode);
                 console.log("Graph API Data:", data); // Debug
 
                 // Transform API nodes to GraphNodes with random initial positions
@@ -112,7 +143,7 @@ export default function GraphPage() {
             }
         };
         loadGraph();
-    }, []);
+    }, [connectionMode]);
 
     // 2. Filter Update
     useEffect(() => {
@@ -136,8 +167,21 @@ export default function GraphPage() {
 
         nodesRef.current = filteredNodes.map((n) => {
             const existing = currentMap.get(n.id);
-            if (existing) return existing; // Keep position
-            return n; // New (shouldn't happen often in filter)
+            if (!existing) return n; // New (shouldn't happen often in filter)
+            // Keep physics state, but reflect latest semantic props (type/label/val).
+            if (
+                existing.type !== n.type ||
+                existing.label !== n.label ||
+                existing.val !== n.val
+            ) {
+                return {
+                    ...existing,
+                    type: n.type,
+                    label: n.label,
+                    val: n.val,
+                };
+            }
+            return existing; // Keep position
         });
         edgesRef.current = filteredEdges;
     }, [showMyPapers, showRelated, showProjects, nodes, edges]);
@@ -158,14 +202,21 @@ export default function GraphPage() {
         window.addEventListener("resize", resizeCanvas);
 
         // 簡易力学シミュレーション
-        const simulate = () => {
+        const simulate = (options?: {
+            damping?: number;
+            repulsionScale?: number;
+            attractionScale?: number;
+            centerGravityScale?: number;
+            maxVelocity?: number;
+        }) => {
             const nodes = nodesRef.current;
             const currentEdges = edgesRef.current;
 
-            const damping = 0.9;
-            const repulsion = 4000;
-            const attraction = 0.008; // Increased slightly for connectivity
-            const centerGravity = 0.005;
+            const damping = options?.damping ?? 0.9;
+            const repulsion = 4000 * (options?.repulsionScale ?? 1);
+            const attraction = 0.01 * (options?.attractionScale ?? 1); // Equilibrium length 100
+            const centerGravity = 0.005 * (options?.centerGravityScale ?? 1);
+            const maxVelocity = options?.maxVelocity ?? 14;
 
             const cx = canvas.width / 2;
             const cy = canvas.height / 2;
@@ -194,10 +245,10 @@ export default function GraphPage() {
                 if (!source || !target) continue;
                 const dx = target.x - source.x;
                 const dy = target.y - source.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                const dist = Math.sqrt(dx * dx + dy * dy) + 0.1;
 
                 // Spring force
-                const force = (dist - 100) * attraction * edge.strength; // Equilibrium length 100
+                const force = (dist - 100) * attraction * edge.strength;
 
                 source.vx += (dx / dist) * force;
                 source.vy += (dy / dist) * force;
@@ -208,6 +259,9 @@ export default function GraphPage() {
             // 位置更新
             for (const node of nodes) {
                 if (dragRef.current.nodeId === node.id) continue;
+                // 速度を制限して初期暴れを抑える
+                node.vx = Math.max(-maxVelocity, Math.min(maxVelocity, node.vx));
+                node.vy = Math.max(-maxVelocity, Math.min(maxVelocity, node.vy));
                 node.vx *= damping;
                 node.vy *= damping;
                 node.x += node.vx;
@@ -225,6 +279,17 @@ export default function GraphPage() {
             }
         };
 
+        // 初回表示前にレイアウトを収束させる
+        for (let i = 0; i < 180; i++) {
+            simulate({
+                damping: 0.84,
+                repulsionScale: 0.65,
+                attractionScale: 1.15,
+                centerGravityScale: 1.1,
+                maxVelocity: 7,
+            });
+        }
+
         // 描画
         const draw = () => {
             const nodes = nodesRef.current;
@@ -238,16 +303,36 @@ export default function GraphPage() {
                 const target = nodes.find((n) => n.id === edge.target);
                 if (!source || !target) continue;
 
-                const isHighlighted =
-                    hoveredNode === source.id || hoveredNode === target.id;
+                const hovered = hoveredNodeRef.current;
+                const selected = selectedNodeRef.current;
+                const isHoveredEdge =
+                    hovered === source.id || hovered === target.id;
+                const isSelectedEdge =
+                    selected?.id === source.id || selected?.id === target.id;
+                const isHighlighted = isHoveredEdge || isSelectedEdge;
+                const lineWeight = Math.max(
+                    0,
+                    Math.min(edge.strength ?? 0.5, 1),
+                );
                 ctx.beginPath();
                 ctx.moveTo(source.x, source.y);
                 ctx.lineTo(target.x, target.y);
                 ctx.strokeStyle = isHighlighted
-                    ? `rgba(130, 120, 255, ${0.4 + edge.strength * 0.5})`
-                    : `rgba(100, 100, 140, ${0.15 + edge.strength * 0.15})`;
-                ctx.lineWidth = isHighlighted ? 2 : 1;
+                    ? `rgba(180, 150, 255, ${Math.max(
+                        0.5,
+                        Math.min(0.9, 0.45 + lineWeight * 0.5),
+                    )})`
+                    : `rgba(120, 130, 190, ${Math.max(
+                        0.28,
+                        Math.min(0.75, 0.25 + lineWeight * 0.35),
+                    )})`;
+                ctx.lineWidth = isHighlighted ? 2.4 : 1.6 + lineWeight * 0.8;
+                ctx.shadowColor = isHighlighted
+                    ? "rgba(178, 136, 255, 0.5)"
+                    : "rgba(130, 130, 170, 0.25)";
+                ctx.shadowBlur = isHighlighted ? 5 : 2;
                 ctx.stroke();
+                ctx.shadowBlur = 0;
             }
 
             // ノード
@@ -256,13 +341,13 @@ export default function GraphPage() {
                 const isOwned = node.type === "owned";
                 const isRelated = node.type === "related";
 
-                const isHovered = hoveredNode === node.id;
-                const isSelected = selectedNode?.id === node.id;
+                const isHovered = hoveredNodeRef.current === node.id;
+                const isSelected = selectedNodeRef.current?.id === node.id;
 
                 // Size
-                let radius = 16;
+                let radius = 20;
                 if (isProject) radius = 30;
-                else if (isOwned) radius = 20;
+                else if (isOwned) radius = 16;
 
                 // グロー
                 if (isHovered || isSelected) {
@@ -352,9 +437,9 @@ export default function GraphPage() {
             // Check in reverse order (top first)
             for (let i = nodesRef.current.length - 1; i >= 0; i--) {
                 const n = nodesRef.current[i];
-                let r = 16;
+                let r = 20;
                 if (n.type === "project") r = 30;
-                else if (n.type === "owned") r = 24;
+                else if (n.type === "owned") r = 16;
 
                 if (Math.sqrt((n.x - x) ** 2 + (n.y - y) ** 2) <= r + 5) {
                     return n;
@@ -382,6 +467,7 @@ export default function GraphPage() {
             }
 
             const found = findNode(x, y);
+            hoveredNodeRef.current = found?.id || null;
             setHoveredNode(found?.id || null);
             canvas.style.cursor = found ? "pointer" : "default";
         };
@@ -397,6 +483,7 @@ export default function GraphPage() {
                     offsetX: x - found.x,
                     offsetY: y - found.y,
                 };
+                selectedNodeRef.current = found;
                 setSelectedNode(found);
             }
         };
@@ -423,7 +510,183 @@ export default function GraphPage() {
             canvas.removeEventListener("mousedown", handleMouseDown);
             canvas.removeEventListener("mouseup", handleMouseUp);
         };
-    }, [hoveredNode, selectedNode]); // Removed nodes/edges from dependency to avoid loop restart on small updates, using refs
+    }, []); // Hover/selection updates are handled through refs to avoid loop restart
+
+    const projectNodes = useMemo(
+        () => nodes.filter((node) => node.type === "project"),
+        [nodes],
+    );
+    const projectNodeIdSet = useMemo(
+        () => new Set(projectNodes.map((node) => node.id)),
+        [projectNodes],
+    );
+    const projectTitleMap = useMemo(
+        () => new Map(projectNodes.map((node) => [node.id, node.label])),
+        [projectNodes],
+    );
+
+    const getConnectedProjectIds = useCallback(
+        (paperId: string): string[] => {
+            const projectIds = new Set<string>();
+            for (const edge of edges) {
+                if (edge.source === paperId && projectNodeIdSet.has(edge.target)) {
+                    projectIds.add(edge.target);
+                }
+                if (edge.target === paperId && projectNodeIdSet.has(edge.source)) {
+                    projectIds.add(edge.source);
+                }
+            }
+            return Array.from(projectIds);
+        },
+        [edges, projectNodeIdSet],
+    );
+
+    const connectedProjectIds =
+        selectedNode && selectedNode.type !== "project"
+            ? getConnectedProjectIds(selectedNode.id)
+            : [];
+    const selectedTitle =
+        selectedNode && selectedNode.type !== "project"
+            ? paperTitleMap[selectedNode.id] || selectedNode.label
+            : selectedNode?.label || "";
+
+    useEffect(() => {
+        if (!selectedNode) return;
+        if (selectedNode.type === "project") {
+            setSelectedProjectId(selectedNode.id);
+            return;
+        }
+
+        const connectedIds = getConnectedProjectIds(selectedNode.id);
+        if (connectedIds.length > 0) {
+            // Prefer an actually linked project when the selected node already belongs to one.
+            setSelectedProjectId(connectedIds[0]);
+            return;
+        }
+
+        if (selectedProjectId && projectNodeIdSet.has(selectedProjectId)) return;
+        setSelectedProjectId(projectNodes[0]?.id || "");
+    }, [
+        selectedNode,
+        selectedProjectId,
+        getConnectedProjectIds,
+        projectNodeIdSet,
+        projectNodes,
+    ]);
+
+    useEffect(() => {
+        if (!selectedNode || selectedNode.type === "project") return;
+        if (paperTitleMap[selectedNode.id]) return;
+
+        const fetchPaperTitle = async () => {
+            try {
+                const detail = await apiGet<PaperTitleResponse>(
+                    `/api/v1/library/${selectedNode.id}`,
+                );
+                if (!detail?.title) return;
+                setPaperTitleMap((prev) => ({
+                    ...prev,
+                    [selectedNode.id]: detail.title,
+                }));
+            } catch {
+                // Keep graph label as fallback when detail fetch fails.
+            }
+        };
+        fetchPaperTitle();
+    }, [selectedNode, paperTitleMap]);
+
+    const handleAddPaperToProject = async (projectId?: string) => {
+        const targetProjectId = projectId || selectedProjectId;
+        if (!selectedNode || selectedNode.type === "project" || !targetProjectId) {
+            return;
+        }
+        setProjectActionLoading({ type: "add", projectId: targetProjectId });
+        try {
+            await apiPost(`/api/v1/projects/${targetProjectId}/papers`, {
+                paper_id: selectedNode.id,
+            });
+            setSelectedProjectId(targetProjectId);
+
+            const hasEdge = edges.some(
+                (edge) =>
+                    (edge.source === targetProjectId &&
+                        edge.target === selectedNode.id) ||
+                    (edge.source === selectedNode.id &&
+                        edge.target === targetProjectId),
+            );
+            if (!hasEdge) {
+                const nextEdges = [
+                    ...edges,
+                    { source: targetProjectId, target: selectedNode.id, strength: 1 },
+                ];
+                setEdges(nextEdges);
+                edgesRef.current = nextEdges;
+            }
+
+            setNodes((prev) =>
+                prev.map((node) =>
+                    node.id === selectedNode.id ? { ...node, type: "related" } : node,
+                ),
+            );
+            setSelectedNode((prev) =>
+                prev && prev.id === selectedNode.id
+                    ? { ...prev, type: "related" }
+                    : prev,
+            );
+        } catch (e: unknown) {
+            alert(e instanceof Error ? e.message : "プロジェクトへの追加に失敗しました");
+        } finally {
+            setProjectActionLoading(null);
+        }
+    };
+
+    const handleRemovePaperFromProject = async (projectId?: string) => {
+        const targetProjectId = projectId || selectedProjectId;
+        if (!selectedNode || selectedNode.type === "project" || !targetProjectId) {
+            return;
+        }
+        if (!confirm("この論文を選択中のプロジェクトから削除しますか？")) return;
+
+        setProjectActionLoading({ type: "remove", projectId: targetProjectId });
+        try {
+            await apiDelete(`/api/v1/projects/${targetProjectId}/papers/${selectedNode.id}`);
+            setSelectedProjectId(targetProjectId);
+
+            const nextEdges = edges.filter(
+                (edge) =>
+                    !(
+                        (edge.source === targetProjectId &&
+                            edge.target === selectedNode.id) ||
+                        (edge.source === selectedNode.id &&
+                            edge.target === targetProjectId)
+                    ),
+            );
+            setEdges(nextEdges);
+            edgesRef.current = nextEdges;
+
+            const isStillInProject = nextEdges.some(
+                (edge) =>
+                    (edge.source === selectedNode.id &&
+                        projectNodeIdSet.has(edge.target)) ||
+                    (edge.target === selectedNode.id &&
+                        projectNodeIdSet.has(edge.source)),
+            );
+            const nextType: GraphNode["type"] = isStillInProject ? "related" : "owned";
+
+            setNodes((prev) =>
+                prev.map((node) =>
+                    node.id === selectedNode.id ? { ...node, type: nextType } : node,
+                ),
+            );
+            setSelectedNode((prev) =>
+                prev && prev.id === selectedNode.id ? { ...prev, type: nextType } : prev,
+            );
+        } catch (e: unknown) {
+            alert(e instanceof Error ? e.message : "プロジェクトからの削除に失敗しました");
+        } finally {
+            setProjectActionLoading(null);
+        }
+    };
 
     return (
         <div className="flex h-[calc(100vh-8rem)] gap-4">
@@ -486,17 +749,126 @@ export default function GraphPage() {
                                       : "関連論文"}
                             </span>
                         </div>
-                        <h3 className="font-semibold text-sm">
-                            {selectedNode.label}
+                        <h3 className="font-semibold text-sm whitespace-normal break-words leading-snug">
+                            {selectedTitle}
                         </h3>
                         {selectedNode.type !== "project" && (
-                            <button
-                                onClick={() =>
-                                    router.push(`/papers/${selectedNode.id}`)
-                                }
-                                className="w-full rounded-lg bg-primary/20 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/30 transition-colors">
-                                詳細を表示 →
-                            </button>
+                            <>
+                                <div className="space-y-3 rounded-lg border border-white/10 bg-background/30 p-3">
+                                    <div className="space-y-1">
+                                        <p className="text-[11px] text-muted-foreground">
+                                            所属プロジェクト
+                                        </p>
+                                        {connectedProjectIds.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {connectedProjectIds.map((id) => (
+                                                    <button
+                                                        key={id}
+                                                        onClick={() =>
+                                                            setSelectedProjectId(id)
+                                                        }
+                                                        className="rounded-full border border-teal-300 bg-teal-50 px-2 py-0.5 text-[10px] text-teal-700 transition-colors dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300">
+                                                        {projectTitleMap.get(id) || "不明"}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[10px] text-muted-foreground">
+                                                未登録
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {projectNodes.length > 0 ? (
+                                        <div className="space-y-1">
+                                            <p className="text-[11px] text-muted-foreground">
+                                                プロジェクト一覧
+                                            </p>
+                                            <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
+                                                {projectNodes.map((project) => {
+                                                    const isLinked =
+                                                        connectedProjectIds.includes(
+                                                            project.id,
+                                                        );
+                                                    const isFocused =
+                                                        selectedProjectId === project.id;
+                                                    return (
+                                                        <div
+                                                            key={project.id}
+                                                            className={`flex items-center gap-2 rounded-md border px-2 py-1.5 ${
+                                                                isFocused
+                                                                    ? "border-primary/40 bg-primary/10"
+                                                                    : "border-white/10 bg-background/20"
+                                                            }`}>
+                                                            <button
+                                                                onClick={() =>
+                                                                    setSelectedProjectId(
+                                                                        project.id,
+                                                                    )
+                                                                }
+                                                                className="min-w-0 flex-1 text-left">
+                                                                <p className="truncate text-[11px] font-medium">
+                                                                    {project.label}
+                                                                </p>
+                                                            </button>
+                                                            {isLinked ? (
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleRemovePaperFromProject(
+                                                                            project.id,
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        projectActionLoading !==
+                                                                        null
+                                                                    }
+                                                                    className="rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-medium text-rose-700 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/20 dark:text-rose-300">
+                                                                    {projectActionLoading
+                                                                        ?.type === "remove" &&
+                                                                    projectActionLoading.projectId ===
+                                                                        project.id
+                                                                        ? "削除中"
+                                                                        : "削除"}
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() =>
+                                                                        handleAddPaperToProject(
+                                                                            project.id,
+                                                                        )
+                                                                    }
+                                                                    disabled={
+                                                                        projectActionLoading !==
+                                                                        null
+                                                                    }
+                                                                    className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-300">
+                                                                    {projectActionLoading
+                                                                        ?.type === "add" &&
+                                                                    projectActionLoading.projectId ===
+                                                                        project.id
+                                                                        ? "追加中"
+                                                                        : "追加"}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-[10px] text-muted-foreground">
+                                            プロジェクトがありません
+                                        </p>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() =>
+                                        router.push(`/papers/${selectedNode.id}`)
+                                    }
+                                    className="w-full rounded-lg bg-primary/20 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/30 transition-colors">
+                                    詳細を表示 →
+                                </button>
+                            </>
                         )}
                         {selectedNode.type === "project" && (
                             <button
@@ -581,7 +953,7 @@ export default function GraphPage() {
                                 onChange={(e) =>
                                     setShowRelated(e.target.checked)
                                 }
-                                className="rounded border-border accent-teal-500"
+                                className="rounded border-border accent-teal-700"
                             />
                             関連研究 (プロジェクト内含む)
                         </label>

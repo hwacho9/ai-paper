@@ -5,25 +5,44 @@
  * 検索フォーム + フィルター + 結果グリッド
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   searchPapers,
+  searchPapersReclustered,
+  ClusterPaperItem,
+  SearchCluster,
   SearchResultItem,
   toggleLike,
   PaperCreate,
 } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-context";
 import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
 
 const SEARCH_HISTORY_KEY = "paper-search-history";
 const MAX_HISTORY_ITEMS = 10;
+const SEARCH_SOURCE_KEY = "paper-search-source";
+const SEARCH_PAGE_STATE_KEY = "paper-search-page-state-v1";
+const ORGANIZED_SWITCH_DELAY_MS = 1500;
+const SOURCE_OPTIONS = [
+  { value: "auto", label: "Auto（分野優先）" },
+  { value: "all", label: "All（統合）" },
+  { value: "arxiv", label: "ArXiv" },
+  { value: "pubmed", label: "PubMed" },
+  { value: "scholar", label: "Google Scholar" },
+] as const;
 
-function formatCitations(count: number | null): string {
-  if (!count) return "0";
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-  return String(count);
-}
+type SearchSource = (typeof SOURCE_OPTIONS)[number]["value"];
+type ResultMode = "list" | "organized";
+type SearchPageState = {
+  query: string;
+  results: SearchResultItem[];
+  organizedClusters: SearchCluster[];
+  organizedFallbackUsed: boolean;
+  hasSearched: boolean;
+  searchSource: SearchSource;
+  resultMode: ResultMode;
+  showOrganizedSwitch: boolean;
+};
 
 function loadSearchHistory(): string[] {
   if (typeof window === "undefined") return [];
@@ -44,22 +63,136 @@ function saveSearchHistory(history: string[]): void {
   }
 }
 
+function loadSearchPageState(): SearchPageState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = sessionStorage.getItem(SEARCH_PAGE_STATE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<SearchPageState>;
+    if (
+      typeof parsed.query !== "string" ||
+      !Array.isArray(parsed.results) ||
+      !Array.isArray(parsed.organizedClusters)
+    ) {
+      return null;
+    }
+
+    const availableSources = SOURCE_OPTIONS.map((option) => option.value) as
+      | readonly SearchSource[]
+      | string[];
+    const nextSource = availableSources.includes(parsed.searchSource as string)
+      ? (parsed.searchSource as SearchSource)
+      : "auto";
+    const nextMode = parsed.resultMode === "organized" ? "organized" : "list";
+
+    return {
+      query: parsed.query,
+      results: parsed.results as SearchResultItem[],
+      organizedClusters: parsed.organizedClusters as SearchCluster[],
+      organizedFallbackUsed: Boolean(parsed.organizedFallbackUsed),
+      hasSearched: Boolean(parsed.hasSearched),
+      searchSource: nextSource,
+      resultMode: nextMode,
+      showOrganizedSwitch: Boolean(parsed.showOrganizedSwitch),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveSearchPageState(state: SearchPageState): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(SEARCH_PAGE_STATE_KEY, JSON.stringify(state));
+  } catch {
+    console.warn("Failed to save search page state");
+  }
+}
+
 export default function SearchPage() {
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResultItem[]>([]);
+  const [organizedClusters, setOrganizedClusters] = useState<SearchCluster[]>(
+    [],
+  );
+  const [organizedFallbackUsed, setOrganizedFallbackUsed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [organizing, setOrganizing] = useState(false);
   const [error, setError] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [searchSource, setSearchSource] = useState<SearchSource>("auto");
+  const [resultMode, setResultMode] = useState<ResultMode>("list");
+  const [showOrganizedSwitch, setShowOrganizedSwitch] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [stateHydrated, setStateHydrated] = useState(false);
+  const [likeOverrides, setLikeOverrides] = useState<Record<string, boolean>>(
+    {},
+  );
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const organizedSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const resultMap = useMemo(
+    () => new Map(results.map((paper) => [paper.external_id, paper])),
+    [results],
+  );
 
   // 初期化時に検索履歴を読み込む
   useEffect(() => {
     setSearchHistory(loadSearchHistory());
+
+    const storedPageState = loadSearchPageState();
+    if (storedPageState) {
+      setQuery(storedPageState.query);
+      setResults(storedPageState.results);
+      setOrganizedClusters(storedPageState.organizedClusters);
+      setOrganizedFallbackUsed(storedPageState.organizedFallbackUsed);
+      setHasSearched(storedPageState.hasSearched);
+      setSearchSource(storedPageState.searchSource);
+      setResultMode(storedPageState.resultMode);
+      setShowOrganizedSwitch(storedPageState.showOrganizedSwitch);
+      setStateHydrated(true);
+      return;
+    }
+
+    const storedSource = localStorage.getItem(SEARCH_SOURCE_KEY);
+    if (
+      storedSource &&
+      (SOURCE_OPTIONS.map((option) => option.value) as readonly string[]).includes(
+        storedSource,
+      )
+    ) {
+      setSearchSource(storedSource as SearchSource);
+    }
+    setStateHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!stateHydrated) return;
+    saveSearchPageState({
+      query,
+      results,
+      organizedClusters,
+      organizedFallbackUsed,
+      hasSearched,
+      searchSource,
+      resultMode,
+      showOrganizedSwitch,
+    });
+  }, [
+    query,
+    results,
+    organizedClusters,
+    organizedFallbackUsed,
+    hasSearched,
+    searchSource,
+    resultMode,
+    showOrganizedSwitch,
+    stateHydrated,
+  ]);
 
   // クリックアウトでサジェストを非表示
   useEffect(() => {
@@ -78,6 +211,14 @@ export default function SearchPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (organizedSwitchTimerRef.current) {
+        clearTimeout(organizedSwitchTimerRef.current);
+      }
+    };
+  }, []);
+
   const filteredSuggestions = searchHistory.filter((item) =>
     item.toLowerCase().includes(query.toLowerCase()),
   );
@@ -85,6 +226,78 @@ export default function SearchPage() {
   const handleSelectSuggestion = (suggestion: string) => {
     setQuery(suggestion);
     setShowSuggestions(false);
+  };
+
+  const resolveClusterPaper = (item: ClusterPaperItem): SearchResultItem => {
+    const existing = resultMap.get(item.paper_id);
+    if (existing) return existing;
+
+    return {
+      external_id: item.paper_id,
+      source: item.source,
+      title: item.title,
+      authors: [],
+      year: item.year,
+      venue: "",
+      abstract: "",
+      doi: null,
+      arxiv_id: null,
+      pdf_url: null,
+      citation_count: null,
+      is_in_library: false,
+    };
+  };
+
+  const resolveLikedState = (paper: SearchResultItem): boolean => {
+    const override = likeOverrides[paper.external_id];
+    if (typeof override === "boolean") return override;
+    return Boolean(paper.is_in_library);
+  };
+
+  const relationDescription = (item: ClusterPaperItem): string => {
+    if (item.relation_type && item.relation_note) {
+      return `${item.relation_type}: ${item.relation_note}`;
+    }
+    if (item.relation_note) return item.relation_note;
+    if (item.relation_type) return item.relation_type;
+    return "";
+  };
+
+  const fetchOrganizedResults = async (
+    trimmedQuery: string,
+    source: SearchSource,
+  ) => {
+    if (organizedSwitchTimerRef.current) {
+      clearTimeout(organizedSwitchTimerRef.current);
+      organizedSwitchTimerRef.current = null;
+    }
+    setShowOrganizedSwitch(false);
+    setOrganizing(true);
+    try {
+      const organized = await searchPapersReclustered({
+        query: trimmedQuery,
+        source,
+        top_k: 20,
+        group_target: 4,
+        include_related: true,
+      });
+      setOrganizedClusters(organized.clusters);
+      setOrganizedFallbackUsed(Boolean(organized.meta?.fallback_used));
+      if (organized.clusters.length > 0) {
+        organizedSwitchTimerRef.current = setTimeout(() => {
+          setShowOrganizedSwitch(true);
+        }, ORGANIZED_SWITCH_DELAY_MS);
+      }
+    } catch (err) {
+      console.error(err);
+      setOrganizedClusters([]);
+      setOrganizedFallbackUsed(true);
+      setShowOrganizedSwitch(false);
+      setResultMode("list");
+      toast.error("再整理結果の取得に失敗したため、リスト表示に切り替えました");
+    } finally {
+      setOrganizing(false);
+    }
   };
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -105,18 +318,39 @@ export default function SearchPage() {
     setError("");
     setHasSearched(true);
     setShowSuggestions(false);
+    setOrganizedClusters([]);
+    setOrganizedFallbackUsed(false);
+    setShowOrganizedSwitch(false);
+    setLikeOverrides({});
+    if (organizedSwitchTimerRef.current) {
+      clearTimeout(organizedSwitchTimerRef.current);
+      organizedSwitchTimerRef.current = null;
+    }
 
     try {
-      const data = await searchPapers({ q: trimmedQuery, limit: 20 });
+      const data = await searchPapers({
+        q: trimmedQuery,
+        source: searchSource,
+        limit: 20,
+      });
       setResults(data.results);
-    } catch (err: any) {
-      // eslint-disable-line @typescript-eslint/no-explicit-any
+      setResultMode("list");
+      if (data.results.length > 0) {
+        void fetchOrganizedResults(trimmedQuery, searchSource);
+      }
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "検索中にエラーが発生しました");
+      setError(
+        err instanceof Error ? err.message : "検索中にエラーが発生しました",
+      );
       setResults([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleChangeResultMode = async (mode: ResultMode) => {
+    setResultMode(mode);
   };
 
   const handleLike = async (paper: SearchResultItem) => {
@@ -125,13 +359,16 @@ export default function SearchPage() {
       return;
     }
 
-    // 楽観的UI更新
-    const originalResults = [...results];
-    setResults(
-      results.map((p) =>
-        p.external_id === paper.external_id
-          ? { ...p, is_in_library: !p.is_in_library }
-          : p,
+    const paperId = paper.external_id;
+    const previousOverride = likeOverrides[paperId];
+    const currentLiked = resolveLikedState(paper);
+    const optimisticLiked = !currentLiked;
+
+    // 楽観的UI更新（list結果 + organized表示の双方）
+    setLikeOverrides((current) => ({ ...current, [paperId]: optimisticLiked }));
+    setResults((current) =>
+      current.map((p) =>
+        p.external_id === paperId ? { ...p, is_in_library: optimisticLiked } : p,
       ),
     );
 
@@ -149,14 +386,13 @@ export default function SearchPage() {
         pdf_url: paper.pdf_url,
       };
 
-      const isLiked = await toggleLike(paper.external_id, paperData);
+      const isLiked = await toggleLike(paperId, paperData);
 
       // サーバーの結果で確定
+      setLikeOverrides((current) => ({ ...current, [paperId]: isLiked }));
       setResults((current) =>
         current.map((p) =>
-          p.external_id === paper.external_id
-            ? { ...p, is_in_library: isLiked }
-            : p,
+          p.external_id === paperId ? { ...p, is_in_library: isLiked } : p,
         ),
       );
 
@@ -166,7 +402,20 @@ export default function SearchPage() {
     } catch (err) {
       console.error(err);
       toast.error("操作に失敗しました");
-      setResults(originalResults); // ロールバック
+      setLikeOverrides((current) => {
+        const next = { ...current };
+        if (typeof previousOverride === "boolean") {
+          next[paperId] = previousOverride;
+        } else {
+          delete next[paperId];
+        }
+        return next;
+      });
+      setResults((current) =>
+        current.map((p) =>
+          p.external_id === paperId ? { ...p, is_in_library: currentLiked } : p,
+        ),
+      );
     }
   };
 
@@ -178,44 +427,69 @@ export default function SearchPage() {
           <span className="gradient-text">論文を検索</span>
         </h2>
         <p className="mt-2 text-muted-foreground">
-          Semantic Scholar から数千万件の論文を検索できます
+          ArXiv / PubMed / Scholar から分野別に最適化して検索します
         </p>
       </div>
 
       {/* 検索フォーム */}
       <form onSubmit={handleSearch} className="mx-auto max-w-2xl">
-        <div className="relative">
-          <svg
-            className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+        <div className="relative space-y-2">
+          <div className="rounded-xl border border-border bg-card px-3 py-2 flex items-center gap-3">
+            <svg
+              className="h-5 w-5 flex-shrink-0 self-center text-muted-foreground"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+              />
+            </svg>
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setShowSuggestions(true)}
+              placeholder="キーワード、タイトル、著者名..."
+              className="min-w-0 flex-1 bg-transparent py-2 text-base outline-none"
             />
-          </svg>
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => setShowSuggestions(true)}
-            placeholder="キーワード、タイトル、著者名..."
-            className="w-full rounded-xl border border-border bg-card py-3.5 pl-12 pr-4 text-base outline-none
-              transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground
-              transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-          >
-            {loading ? "検索中..." : "検索"}
-          </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex h-10 min-w-[5rem] items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+            >
+              {loading ? "検索中..." : "検索"}
+            </button>
+          </div>
+          <div className="flex justify-center pt-1">
+            <div className="inline-flex items-center rounded-full border border-border/70 bg-muted/40 p-1">
+              {SOURCE_OPTIONS.map((option) => {
+                const selected = searchSource === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      const nextSource = option.value;
+                      setSearchSource(nextSource);
+                      localStorage.setItem(SEARCH_SOURCE_KEY, nextSource);
+                    }}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                      selected
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-background/70"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {/* 検索履歴サジェスト */}
           {showSuggestions && filteredSuggestions.length > 0 && (
@@ -290,89 +564,283 @@ export default function SearchPage() {
 
       {hasSearched && !loading && !error && (
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {results.length}
-            </span>{" "}
-            件の結果
-          </p>
-          <div className="space-y-3">
-            {results.map((paper) => (
-              <div
-                key={paper.external_id}
-                className="glass-card group rounded-xl p-5 transition-all duration-200 hover:border-primary/30"
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {results.length}
+              </span>{" "}
+              件の結果
+            </p>
+            {resultMode === "organized" && (
+              <button
+                type="button"
+                onClick={() => void handleChangeResultMode("list")}
+                className="rounded-md border border-border bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted/60"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold leading-snug group-hover:text-primary transition-colors">
-                      {paper.title}
-                    </h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {paper.authors.join(", ")}
-                    </p>
-                    <p className="mt-2 text-sm text-muted-foreground/80 line-clamp-2">
-                      {paper.abstract || "要約なし"}
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
-                      <span className="rounded-md bg-muted px-2 py-1 font-medium">
-                        {paper.venue || "Unknown Venue"} {paper.year || ""}
-                      </span>
-                      <span className="text-muted-foreground">
-                        引用: {formatCitations(paper.citation_count)}
-                      </span>
-                      {paper.pdf_url && (
-                        <a
-                          href={paper.pdf_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-primary hover:underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <svg
-                            className="h-3 w-3"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth={1.5}
-                            stroke="currentColor"
+                Listへ戻る
+              </button>
+            )}
+          </div>
+
+          {resultMode === "list" && (
+            <div className="space-y-3">
+              {organizing && (
+                <div className="rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary/40 border-t-primary" />
+                    Organizing now...
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    結果を「重要論文中心」に再整理しています。完了後に切替できます。
+                  </p>
+                </div>
+              )}
+              {!organizing &&
+                !organizedFallbackUsed &&
+                showOrganizedSwitch &&
+                organizedClusters.length > 0 && (
+                  <div className="rounded-xl border border-primary/40 bg-primary/15 px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-primary">
+                          Organized View Ready
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          重要論文と発展・関連の整理結果を確認できます。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleChangeResultMode("organized")}
+                        className="rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground transition hover:opacity-90"
+                      >
+                        Organized表示へ
+                      </button>
+                    </div>
+                  </div>
+                )}
+              {results.map((paper) => (
+                <div
+                  key={paper.external_id}
+                  className="glass-card group rounded-xl p-5 transition-all duration-200 hover:border-primary/30"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold leading-snug group-hover:text-primary transition-colors">
+                        {paper.title}
+                      </h3>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {paper.authors.join(", ")}
+                      </p>
+                      <p className="mt-2 text-sm text-muted-foreground/80 line-clamp-2">
+                        {paper.abstract || "要約なし"}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                        <span className="rounded-md bg-muted px-2 py-1 font-medium">
+                          {paper.venue || "Unknown Venue"} {paper.year || ""}
+                        </span>
+                        {paper.pdf_url && (
+                          <a
+                            href={paper.pdf_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                            />
-                          </svg>
-                          PDF
-                        </a>
+                            <svg
+                              className="h-3 w-3"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={1.5}
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                              />
+                            </svg>
+                            PDF
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                      {(() => {
+                        const isLiked = resolveLikedState(paper);
+                        return (
+                      <button
+                        onClick={() => handleLike(paper)}
+                        className={`rounded-md px-2 py-1 text-sm leading-none transition-all ${
+                          isLiked
+                            ? "bg-primary/20 text-primary"
+                            : "bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary"
+                        }`}
+                        title={
+                          isLiked
+                            ? "ライブラリに追加済み"
+                            : "ライブラリに追加"
+                        }
+                      >
+                        {isLiked ? "❤️ 保存済み" : "🤍 保存"}
+                      </button>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {results.length === 0 && (
+                <div className="py-12 text-center text-muted-foreground">
+                  検索結果が見つかりませんでした
+                </div>
+              )}
+            </div>
+          )}
+
+          {resultMode === "organized" && (
+            <div className="space-y-4">
+              {organizedFallbackUsed && (
+                <p className="text-xs text-amber-500">
+                  再整理に失敗したため、フォールバック結果を表示しています。
+                </p>
+              )}
+              {organizing && (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  結果を再整理しています...
+                </div>
+              )}
+              {!organizing &&
+                organizedClusters.map((cluster) => (
+                  <div
+                    key={cluster.cluster_id}
+                    className="glass-card rounded-xl border border-border/60 p-4"
+                  >
+                    <p className="text-xs text-primary">{cluster.label}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {cluster.summary}
+                    </p>
+                    <div className="mt-3 space-y-3">
+                      <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                        <p className="text-xs font-medium text-primary">Hub</p>
+                        <p className="text-sm font-semibold">
+                          {cluster.hub_paper.title}
+                        </p>
+                        {(() => {
+                          const hubPaper = resolveClusterPaper(cluster.hub_paper);
+                          const isLiked = resolveLikedState(hubPaper);
+                          return (
+                        <button
+                          type="button"
+                          onClick={() => handleLike(hubPaper)}
+                          className={`mt-2 rounded-md px-2 py-1 text-xs ${
+                            isLiked
+                              ? "bg-primary/20 text-primary"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {isLiked ? "❤️ 保存済み" : "🤍 保存"}
+                        </button>
+                          );
+                        })()}
+                      </div>
+
+                      {cluster.children.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-xs text-muted-foreground">
+                            発展論文
+                          </p>
+                          <div className="space-y-2">
+                            {cluster.children.map((item) => {
+                              const paper = resolveClusterPaper(item);
+                              return (
+                                <div
+                                  key={`${cluster.cluster_id}-child-${item.paper_id}`}
+                                  className="rounded-lg border border-border/60 bg-background/60 p-3"
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm">{paper.title}</p>
+                                      {relationDescription(item) && (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {relationDescription(item)}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleLike(paper)}
+                                      className={`rounded-md px-2 py-1 text-xs ${
+                                        resolveLikedState(paper)
+                                          ? "bg-primary/20 text-primary"
+                                          : "bg-muted text-muted-foreground"
+                                      }`}
+                                    >
+                                      {resolveLikedState(paper)
+                                        ? "❤️ 保存済み"
+                                        : "🤍 保存"}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {cluster.related.length > 0 && (
+                        <div>
+                          <p className="mb-2 text-xs text-muted-foreground">
+                            関連論文
+                          </p>
+                          <div className="space-y-2">
+                            {cluster.related.map((item) => {
+                              const paper = resolveClusterPaper(item);
+                              return (
+                                <div
+                                  key={`${cluster.cluster_id}-related-${item.paper_id}`}
+                                  className="rounded-lg border border-border/60 bg-background/60 p-3"
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-sm">{paper.title}</p>
+                                      {relationDescription(item) && (
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          {relationDescription(item)}
+                                        </p>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleLike(paper)}
+                                      className={`rounded-md px-2 py-1 text-xs ${
+                                        resolveLikedState(paper)
+                                          ? "bg-primary/20 text-primary"
+                                          : "bg-muted text-muted-foreground"
+                                      }`}
+                                    >
+                                      {resolveLikedState(paper)
+                                        ? "❤️ 保存済み"
+                                        : "🤍 保存"}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-col items-center gap-2">
-                    <button
-                      onClick={() => handleLike(paper)}
-                      className={`rounded-lg p-2 transition-all hover:scale-110 ${
-                        paper.is_in_library
-                          ? "bg-primary/20 text-primary"
-                          : "bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary"
-                      }`}
-                      title={
-                        paper.is_in_library
-                          ? "ライブラリに追加済み"
-                          : "ライブラリに追加"
-                      }
-                    >
-                      {paper.is_in_library ? "❤️" : "🤍"}
-                    </button>
-                    {/* Project functionality can be added here later */}
-                  </div>
+                ))}
+              {!organizing && organizedClusters.length === 0 && (
+                <div className="py-12 text-center text-muted-foreground">
+                  再整理結果が見つかりませんでした
                 </div>
-              </div>
-            ))}
-            {results.length === 0 && (
-              <div className="py-12 text-center text-muted-foreground">
-                検索結果が見つかりませんでした
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
+
         </div>
       )}
 

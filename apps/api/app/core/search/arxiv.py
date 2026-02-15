@@ -26,8 +26,38 @@ class ArxivClient(BaseSearchClient):
                 del self._cache[cache_key]
 
         await self._wait_for_rate_limit()
-        
-        results = await self._fetch_with_retry(query, limit)
+
+        # Prioritize title matching first to catch exact-paper queries early.
+        cleaned_query = query.strip()
+        candidates = []
+        if " " in cleaned_query:
+            title_query = cleaned_query.replace('"', "'")
+            candidates.append(f'ti:"{title_query}"')
+        candidates.append(f"all:{cleaned_query}")
+
+        seen_arxiv_ids: set[str] = set()
+        results: list[SearchResult] = []
+        for q in candidates:
+            try:
+                result_items = await self._fetch_with_retry(q, limit)
+            except Exception:
+                # keep trying fallback candidates on failure
+                continue
+
+            for item in result_items:
+                arxiv_id = item.external_ids.get("ArXiv")
+                if arxiv_id:
+                    normalized_id = arxiv_id.lower()
+                    if normalized_id in seen_arxiv_ids:
+                        continue
+                    seen_arxiv_ids.add(normalized_id)
+                results.append(item)
+
+            if len(results) >= limit:
+                break
+        if not results:
+            # if all candidates fail, let the last attempt bubble up for visibility
+            results = await self._fetch_with_retry(f"all:{cleaned_query}", limit)
         
         # Update cache
         self._cache[cache_key] = (results, now)
@@ -40,7 +70,7 @@ class ArxivClient(BaseSearchClient):
     )
     async def _fetch_with_retry(self, query: str, limit: int) -> list[SearchResult]:
         params = {
-            "search_query": f"all:{query}",
+            "search_query": query,
             "start": 0,
             "max_results": limit,
             "sortBy": "relevance",

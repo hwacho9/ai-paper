@@ -25,13 +25,13 @@ export function KeywordInputControl({
   // タイプに応じた色スタイルを決定
   const colorClass =
     type === "prerequisite"
-      ? "border-amber-400/50 bg-background text-amber-200 focus:border-amber-300 focus:ring-amber-400/30"
-      : "border-sky-400/50 bg-background text-sky-200 focus:border-sky-300 focus:ring-sky-400/30";
+      ? "border-amber-300 bg-background text-amber-800 focus:border-amber-500 focus:ring-amber-500/30 dark:border-amber-400/50 dark:text-amber-200 dark:focus:border-amber-300 dark:focus:ring-amber-400/30"
+      : "border-sky-300 bg-background text-sky-800 focus:border-sky-500 focus:ring-sky-500/30 dark:border-sky-400/50 dark:text-sky-200 dark:focus:border-sky-300 dark:focus:ring-sky-400/30";
 
   const buttonColorClass =
     type === "prerequisite"
-      ? "border-amber-400/50 bg-amber-400/15 text-amber-200 hover:bg-amber-400/25"
-      : "border-sky-400/50 bg-sky-400/15 text-sky-200 hover:bg-sky-400/25";
+      ? "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200 dark:border-amber-400/50 dark:bg-amber-400/15 dark:text-amber-200 dark:hover:bg-amber-400/25"
+      : "border-sky-300 bg-sky-100 text-sky-800 hover:bg-sky-200 dark:border-sky-400/50 dark:bg-sky-400/15 dark:text-sky-200 dark:hover:bg-sky-400/25";
 
   if (inputOpen) {
     return (

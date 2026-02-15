@@ -18,7 +18,7 @@ import {
     type MemoResponse,
 } from "@/lib/api";
 import { apiGet, apiPost, apiDelete } from "@/lib/api/client";
-import { auth } from "@/lib/firebase";
+import { getCurrentAuthToken } from "@/lib/firebase";
 
 type Tab = "latex" | "literature" | "memos";
 
@@ -489,7 +489,7 @@ export default function ProjectDetailPage({
     ) => {
         const files = e.target.files;
         if (!files) return;
-        const token = await auth?.currentUser?.getIdToken();
+        const token = await getCurrentAuthToken();
         if (!token) return;
 
         for (const file of Array.from(files)) {
@@ -675,7 +675,7 @@ export default function ProjectDetailPage({
             return;
         }
 
-        const token = await auth?.currentUser?.getIdToken();
+        const token = await getCurrentAuthToken();
         if (!token) {
             setPdfPreviewUrl(null);
             return;
@@ -809,6 +809,36 @@ export default function ProjectDetailPage({
         }
         return hits;
     }, [docSearchQuery, latexContent]);
+
+    const japaneseTextMatches = useMemo(() => {
+        const hits: Array<{
+            start: number;
+            end: number;
+            preview: string;
+            line: number;
+        }> = [];
+        const regex =
+            /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]+/g;
+        for (const match of latexContent.matchAll(regex)) {
+            const text = match[0] || "";
+            const start = match.index ?? -1;
+            if (start < 0) continue;
+            const end = start + text.length;
+            const previewStart = Math.max(0, start - 20);
+            const previewEnd = Math.min(latexContent.length, end + 20);
+            const line = latexContent.slice(0, start).split("\n").length;
+            hits.push({
+                start,
+                end,
+                line,
+                preview: latexContent
+                    .slice(previewStart, previewEnd)
+                    .replace(/\n/g, " "),
+            });
+            if (hits.length >= 30) break;
+        }
+        return hits;
+    }, [latexContent]);
 
     const bibtexText = useMemo(() => {
         if (papers.length === 0) return "論文がありません";
@@ -1123,13 +1153,33 @@ export default function ProjectDetailPage({
                                 <button
                                     onClick={() => void handleCompileTex()}
                                     disabled={isCompiling}
-                                    className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500 hover:text-emerald-950 transition-colors disabled:opacity-50">
+                                    className="rounded-md border border-emerald-700 bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-800 transition-colors disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500 dark:hover:text-emerald-950">
                                     {isCompiling
                                         ? "Compiling..."
                                         : "Compile PDF"}
                                 </button>
                             </div>
                         </div>
+                        {japaneseTextMatches.length > 0 && (
+                            <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
+                                <div className="mb-1.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                                    日本語を検出しました（{japaneseTextMatches.length}
+                                    箇所）。LaTeXコンパイルのため英語にしてください。
+                                </div>
+                                <div className="max-h-28 space-y-1 overflow-auto pr-1">
+                                    {japaneseTextMatches.map((m, idx) => (
+                                        <button
+                                            key={`${m.start}-${idx}`}
+                                            onClick={() =>
+                                                focusEditorRange(m.start, m.end)
+                                            }
+                                            className="w-full rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-left text-[11px] text-amber-900 hover:border-amber-400 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-100 dark:hover:border-amber-400/40">
+                                            L{m.line}: {m.preview}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         {isTextTexFile(selectedTexPath) ? (
                             <textarea
                                 ref={latexEditorRef}
@@ -1138,7 +1188,11 @@ export default function ProjectDetailPage({
                                     setLatexContent(e.target.value)
                                 }
                                 spellCheck={false}
-                                className="h-[560px] w-full resize-y rounded-lg border border-border bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                className={`h-[560px] w-full resize-y rounded-lg border bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:ring-2 ${
+                                    japaneseTextMatches.length > 0
+                                        ? "border-amber-500/50 focus:border-amber-400 focus:ring-amber-500/25"
+                                        : "border-border focus:border-primary focus:ring-primary/20"
+                                }`}
                                 placeholder="ここにLaTeXを書いてください..."
                             />
                         ) : (
@@ -1377,7 +1431,7 @@ export default function ProjectDetailPage({
                                             void handleRemovePaper(meta.paperId)
                                         }
                                         disabled={removingPaperId === meta.paperId}
-                                        className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-300 hover:bg-red-500/20 disabled:opacity-60">
+                                        className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20">
                                         {removingPaperId === meta.paperId
                                             ? "削除中..."
                                             : "削除"}
@@ -1470,7 +1524,7 @@ export default function ProjectDetailPage({
                             {editingMemoId && (
                                 <button
                                     onClick={() => handleDeleteMemo(editingMemoId)}
-                                    className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/20">
+                                    className="rounded-lg border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20">
                                     削除
                                 </button>
                             )}
