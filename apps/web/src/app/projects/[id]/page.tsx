@@ -1153,7 +1153,7 @@ export default function ProjectDetailPage({
                                 <button
                                     onClick={() => void handleCompileTex()}
                                     disabled={isCompiling}
-                                    className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500 hover:text-emerald-950 transition-colors disabled:opacity-50">
+                                    className="rounded-md border border-emerald-700 bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-800 transition-colors disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500 dark:hover:text-emerald-950">
                                     {isCompiling
                                         ? "Compiling..."
                                         : "Compile PDF"}
@@ -1161,8 +1161,8 @@ export default function ProjectDetailPage({
                             </div>
                         </div>
                         {japaneseTextMatches.length > 0 && (
-                            <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
-                                <div className="mb-1.5 text-xs font-medium text-amber-300">
+                            <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-2 dark:border-amber-500/30 dark:bg-amber-500/10">
+                                <div className="mb-1.5 text-xs font-medium text-amber-800 dark:text-amber-300">
                                     日本語を検出しました（{japaneseTextMatches.length}
                                     箇所）。LaTeXコンパイルのため英語にしてください。
                                 </div>
@@ -1173,7 +1173,7 @@ export default function ProjectDetailPage({
                                             onClick={() =>
                                                 focusEditorRange(m.start, m.end)
                                             }
-                                            className="w-full rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1 text-left text-[11px] text-amber-100 hover:border-amber-400/40">
+                                            className="w-full rounded-md border border-amber-300 bg-amber-100 px-2 py-1 text-left text-[11px] text-amber-900 hover:border-amber-400 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-100 dark:hover:border-amber-400/40">
                                             L{m.line}: {m.preview}
                                         </button>
                                     ))}
@@ -1431,7 +1431,7 @@ export default function ProjectDetailPage({
                                             void handleRemovePaper(meta.paperId)
                                         }
                                         disabled={removingPaperId === meta.paperId}
-                                        className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-300 hover:bg-red-500/20 disabled:opacity-60">
+                                        className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20">
                                         {removingPaperId === meta.paperId
                                             ? "削除中..."
                                             : "削除"}
@@ -1524,7 +1524,7 @@ export default function ProjectDetailPage({
                             {editingMemoId && (
                                 <button
                                     onClick={() => handleDeleteMemo(editingMemoId)}
-                                    className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-300 hover:bg-red-500/20">
+                                    className="rounded-lg border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-100 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20">
                                     削除
                                 </button>
                             )}
