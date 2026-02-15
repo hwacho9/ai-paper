@@ -52,12 +52,12 @@ function getPaperStatus(paper: PaperResponse): string {
 }
 
 export default function LibraryPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [papers, setPapers] = useState<PaperResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<string>("すべて");
-  const [sortMode, setSortMode] = useState<SortMode>("title");
+  const [sortMode, setSortMode] = useState<SortMode>("created_desc");
   const [question, setQuestion] = useState("");
   const [isAsking, setIsAsking] = useState(false);
   const [askAnswer, setAskAnswer] = useState<string>("");
