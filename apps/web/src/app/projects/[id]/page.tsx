@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, use, useMemo, useRef } from "react";
 import Link from "next/link";
-import { RotateCw } from "lucide-react";
+import { RotateCw, Upload } from "lucide-react";
 import { GraphView } from "./_components/graph-view";
 import {
     getMemos,
@@ -163,6 +163,7 @@ export default function ProjectDetailPage({
     const [memoSaving, setMemoSaving] = useState(false);
     const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
     const [nextProjectMemoNumber, setNextProjectMemoNumber] = useState(1);
+    const [isFileDragOver, setIsFileDragOver] = useState(false);
     const latexEditorRef = useRef<HTMLTextAreaElement>(null);
     const texFileInputRef = useRef<HTMLInputElement>(null);
     const pdfObjectUrlRef = useRef<string | null>(null);
@@ -493,11 +494,8 @@ export default function ProjectDetailPage({
         }
     };
 
-    const handleUploadTexFiles = async (
-        e: React.ChangeEvent<HTMLInputElement>,
-    ) => {
-        const files = e.target.files;
-        if (!files) return;
+    const uploadTexFiles = async (files: FileList | File[]) => {
+        if (!files || files.length === 0) return;
         const token = await getCurrentAuthToken();
         if (!token) return;
 
@@ -525,6 +523,43 @@ export default function ProjectDetailPage({
             texFileInputRef.current.value = "";
         }
         await fetchTexFiles();
+    };
+
+    const handleUploadTexFiles = async (
+        e: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        const files = e.target.files;
+        if (!files) return;
+        try {
+            await uploadTexFiles(files);
+        } catch (e: unknown) {
+            alert(e instanceof Error ? e.message : "アップロードに失敗しました");
+        }
+    };
+
+    const handleFilesDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFileDragOver(true);
+    };
+
+    const handleFilesDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFileDragOver(false);
+    };
+
+    const handleFilesDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFileDragOver(false);
+        const files = e.dataTransfer.files;
+        if (!files || files.length === 0) return;
+        try {
+            await uploadTexFiles(files);
+        } catch (e: unknown) {
+            alert(e instanceof Error ? e.message : "アップロードに失敗しました");
+        }
     };
 
     const handleDeleteTexFile = async (path: string) => {
@@ -1110,7 +1145,15 @@ export default function ProjectDetailPage({
                     </div>
 
                     {leftPanelMode === "files" && (
-                        <div className="glass-card rounded-xl p-4">
+                        <div
+                            onDragOver={handleFilesDragOver}
+                            onDragLeave={handleFilesDragLeave}
+                            onDrop={(e) => void handleFilesDrop(e)}
+                            className={`glass-card rounded-xl p-4 transition-colors ${
+                                isFileDragOver
+                                    ? "border-primary/60 bg-primary/5"
+                                    : ""
+                            }`}>
                             <div className="mb-3 flex items-center justify-between">
                                 <h4 className="font-semibold">Files</h4>
                                 <div className="flex items-center gap-2">
@@ -1118,8 +1161,10 @@ export default function ProjectDetailPage({
                                         onClick={() =>
                                             texFileInputRef.current?.click()
                                         }
-                                        className="rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs text-primary hover:bg-primary hover:text-primary-foreground transition-colors">
-                                        + Upload
+                                        className="rounded-md border border-primary/30 bg-primary/10 p-1.5 text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+                                        title="アップロード"
+                                        aria-label="アップロード">
+                                        <Upload className="h-4 w-4" />
                                     </button>
                                     <button
                                         onClick={() => setLeftPanelMode(null)}
@@ -1135,6 +1180,11 @@ export default function ProjectDetailPage({
                                     onChange={handleUploadTexFiles}
                                 />
                             </div>
+                            {isFileDragOver && (
+                                <div className="mb-3 rounded-md border border-dashed border-primary/50 bg-primary/10 px-2 py-1.5 text-center text-xs text-primary">
+                                    ここにファイルをドロップしてアップロード
+                                </div>
+                            )}
                             <div className="space-y-1 max-h-[560px] overflow-auto">
                                 {texLoading && (
                                     <p className="text-xs text-muted-foreground">
