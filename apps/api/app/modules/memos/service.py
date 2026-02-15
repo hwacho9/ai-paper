@@ -34,7 +34,7 @@ class MemoService:
 ## 感想・メモ
 """
         create_data = MemoCreate(
-            title=f"Note: {paper_title}",
+            title=f"Paper: {paper_title}",
             body=initial_body,
             tags=["auto-generated"],
             status="draft",

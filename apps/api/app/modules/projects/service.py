@@ -44,6 +44,10 @@ class ProjectService:
             project["paper_count"] = len(seed_ids)
             await self._sync_project_references_bib(project["id"], owner_uid)
 
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+
         return project
 
     async def get_project(self, project_id: str, owner_uid: str) -> dict:
@@ -79,6 +83,10 @@ class ProjectService:
                 detail="プロジェクトが見つかりません。",
             )
 
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+
     async def add_paper(self, project_id: str, paper_id: str, owner_uid: str, note: str = "", role: str = "reference") -> dict:
         """参照論文追加"""
         # オーナー検証
@@ -93,6 +101,11 @@ class ProjectService:
             "note": note,
             "role": role,
         })
+        
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+        
         await self._sync_project_references_bib(project_id, owner_uid)
         return result
 
@@ -112,6 +125,10 @@ class ProjectService:
             )
         await self._sync_project_references_bib(project_id, owner_uid)
 
+        # Invalidate Graph Cache
+        from app.modules.related.service import related_service
+        await related_service.invalidate_user_graph_cache(owner_uid)
+
     async def get_project_papers(self, project_id: str, owner_uid: str) -> list[dict]:
         """プロジェクトの参照論文一覧"""
         project = await self.repository.get_by_id(project_id, owner_uid)
@@ -127,6 +144,51 @@ class ProjectService:
 
     def _bucket(self):
         return storage.bucket(settings.gcs_bucket_name)
+
+    def _sanitize_title_for_pdflatex(self, title: str) -> str:
+        """pdflatex で安全に処理できる ASCII タイトルへ寄せる"""
+        compact = " ".join((title or "").split())
+        ascii_only = "".join(ch for ch in compact if ord(ch) < 128 and ch.isprintable())
+        if not ascii_only.strip():
+            ascii_only = "Project"
+        replacements = {
+            "\\": r"\textbackslash{}",
+            "{": r"\{",
+            "}": r"\}",
+            "&": r"\&",
+            "%": r"\%",
+            "$": r"\$",
+            "#": r"\#",
+            "_": r"\_",
+            "^": r"\^{}",
+            "~": r"\~{}",
+        }
+        escaped = "".join(replacements.get(ch, ch) for ch in ascii_only)
+        return escaped
+
+    def _rewrite_main_tex_title_for_pdflatex(self, main_path: Path) -> bool:
+        """main.tex の \\title{} が Unicode で落ちる場合に、タイトルのみ安全化する"""
+        try:
+            content = main_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return False
+
+        m = re.search(r"\\title\{([^}]*)\}", content, flags=re.MULTILINE)
+        if not m:
+            return False
+
+        original_title = m.group(1)
+        if all(ord(ch) < 128 for ch in original_title):
+            return False
+
+        safe_title = self._sanitize_title_for_pdflatex(original_title)
+        updated = (
+            content[: m.start()]
+            + f"\\title{{{safe_title}}}"
+            + content[m.end() :]
+        )
+        main_path.write_text(updated, encoding="utf-8")
+        return True
 
     async def _ensure_tex_workspace_defaults(
         self, owner_uid: str, project_id: str, title: str = "My Project"
@@ -144,7 +206,7 @@ class ProjectService:
                 "\\usepackage{lmodern}\n"
                 "\\usepackage{biblatex}\n"
                 "\\addbibresource{references.bib}\n\n"
-                f"\\title{{{title}}}\n"
+                f"\\title{{{self._sanitize_title_for_pdflatex(title)}}}\n"
                 "\\author{}\n"
                 "\\date{}\n\n"
                 "\\begin{document}\n"
@@ -529,10 +591,29 @@ class ProjectService:
                     (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
                 )
                 if proc.returncode != 0:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"LaTeXコンパイル失敗\n{compile_logs[-1][-4000:]}",
+                    first_log = compile_logs[-1]
+                    unicode_error = (
+                        "Unicode character" in first_log
+                        and "not set up for use with LaTeX" in first_log
                     )
+                    recovered = False
+                    if unicode_error:
+                        recovered = self._rewrite_main_tex_title_for_pdflatex(main_path)
+                        if recovered:
+                            compile_logs.append(
+                                "[fallback] pdflatex Unicodeエラーを検出したため、"
+                                "main.tex の \\title{} を ASCII 安全化して再実行しました。"
+                            )
+                            proc = run_pdflatex()
+                            compile_logs.append(
+                                (proc.stdout or "")
+                                + ("\n" + proc.stderr if proc.stderr else "")
+                            )
+                    if proc.returncode != 0:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"LaTeXコンパイル失敗\n{compile_logs[-1][-4000:]}",
+                        )
 
                 bcf_path = out_dir / f"{main_stem}.bcf"
                 if bcf_path.exists():

@@ -34,6 +34,12 @@ class ScholarClient(BaseSearchClient):
                 venue = bib.get('venue', 'Google Scholar')
                 abstract = bib.get('abstract', '')
                 pdf_url = item.get('eprint_url')
+                citation_count = item.get("num_citations")
+                if citation_count is not None:
+                    try:
+                        citation_count = int(citation_count)
+                    except (TypeError, ValueError):
+                        citation_count = None
                 
                 # External IDs (Scholar doesn't give DOI easily without extra requests)
                 external_ids = {} # might parse from url or check extra fields
@@ -46,6 +52,7 @@ class ScholarClient(BaseSearchClient):
                     abstract=abstract,
                     external_ids=external_ids,
                     pdf_url=pdf_url,
+                    citation_count=citation_count,
                     source="scholar"
                 ))
         except StopIteration:

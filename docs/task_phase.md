@@ -72,12 +72,18 @@
     - [x] PDF Upload API -> Firebase Storage
     - [x] Cloud Run Job Worker (Parse/Chunk/Embed/Index)
     - [x] Vector Search Indexing
-- [ ] **D-09 Reading**: チャンク単位のハイライト/引用
+- [x] **D-09 Reading**: チャンクAPI + ハイライト + ライブラリRAG質問
+    - [x] `GET /api/v1/papers/:id/outline`
+    - [x] `GET /api/v1/papers/:id/chunks`
+    - [x] `POST /api/v1/papers/:id/explain`
+    - [x] `POST /api/v1/papers/:id/highlights`
+    - [x] `GET /api/v1/papers/:id/highlights`
+    - [x] `POST /api/v1/library/ask`
 
 ### フロントエンド
 
 - [ ] **PDF Viewer**: ハイライト機能付きビューア
-- [ ] **Ask Paper**: 論文への質問 (RAG)
+- [x] **Ask Paper**: 論文への質問 (RAG) — `apps/web/src/app/library/page.tsx`
 
 ---
 

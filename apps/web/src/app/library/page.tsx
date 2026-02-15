@@ -5,13 +5,38 @@
  * グリッド/リスト切替 + ソート + フィルター + ライブラリ削除
  */
 
-import { useState, useEffect, useCallback } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import Link from "next/link";
-import { getLibrary, toggleLike, PaperResponse } from "@/lib/api";
+import { askLibrary, getLibrary, toggleLike, PaperResponse } from "@/lib/api";
 import { toast } from "sonner";
 import { PdfUploadButton } from "@/components/pdf-upload-button";
 
 type ViewMode = "grid" | "list";
+type SortMode = "title" | "created_desc" | "created_asc";
+type LibraryAskCitation = {
+  paper_id: string;
+  chunk_id: string;
+  score: number;
+  page_range: number[];
+  snippet: string;
+};
+
+type LibraryQaState = {
+  question: string;
+  askAnswer: string;
+  askConfidence: number;
+  citations: LibraryAskCitation[];
+  askError: string;
+  expandedPapers: Record<string, boolean>;
+};
+
+const LIBRARY_QA_STATE_KEY = "library-qa-state-v1";
 
 const statusColors: Record<string, string> = {
   READY: "bg-emerald-500/20 text-emerald-400",
@@ -44,12 +69,111 @@ function getPaperStatus(paper: PaperResponse): string {
   return "PROCESSING";
 }
 
+function loadLibraryQaState(): LibraryQaState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = sessionStorage.getItem(LIBRARY_QA_STATE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<LibraryQaState>;
+    if (
+      typeof parsed.question !== "string" ||
+      typeof parsed.askAnswer !== "string" ||
+      typeof parsed.askConfidence !== "number" ||
+      !Array.isArray(parsed.citations) ||
+      typeof parsed.askError !== "string" ||
+      typeof parsed.expandedPapers !== "object" ||
+      parsed.expandedPapers === null
+    ) {
+      return null;
+    }
+    return {
+      question: parsed.question,
+      askAnswer: parsed.askAnswer,
+      askConfidence: parsed.askConfidence,
+      citations: parsed.citations as LibraryAskCitation[],
+      askError: parsed.askError,
+      expandedPapers: parsed.expandedPapers as Record<string, boolean>,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveLibraryQaState(state: LibraryQaState): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(LIBRARY_QA_STATE_KEY, JSON.stringify(state));
+  } catch {
+    console.warn("Failed to save library qa state");
+  }
+}
+
 export default function LibraryPage() {
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [papers, setPapers] = useState<PaperResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<string>("すべて");
+  const [sortMode, setSortMode] = useState<SortMode>("created_desc");
+  const [question, setQuestion] = useState("");
+  const [isAsking, setIsAsking] = useState(false);
+  const [askAnswer, setAskAnswer] = useState<string>("");
+  const [askConfidence, setAskConfidence] = useState<number>(0);
+  const [citations, setCitations] = useState<LibraryAskCitation[]>([]);
+  const [askError, setAskError] = useState("");
+  const [expandedPapers, setExpandedPapers] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [qaStateHydrated, setQaStateHydrated] = useState(false);
+  const paperTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const paper of papers) {
+      map.set(paper.id, paper.title);
+    }
+    return map;
+  }, [papers]);
+
+  const resolvePaperTitle = (paperId: string) =>
+    paperTitleById.get(paperId) || paperId;
+
+  const groupedCitations = useMemo(() => {
+    const map = new Map<
+      string,
+      Array<{
+        paper_id: string;
+        chunk_id: string;
+        score: number;
+        page_range: number[];
+        snippet: string;
+      }>
+    >();
+    for (const item of citations) {
+      const list = map.get(item.paper_id) ?? [];
+      list.push(item);
+      map.set(item.paper_id, list);
+    }
+
+    return Array.from(map.entries()).map(([paperId, items]) => ({
+      paperId,
+      title: resolvePaperTitle(paperId),
+      items,
+    }));
+  }, [citations, resolvePaperTitle]);
+
+  const togglePaper = (paperId: string) => {
+    setExpandedPapers((prev) => ({
+      ...prev,
+      [paperId]: !prev[paperId],
+    }));
+  };
+
+  const buildCitationLink = (citation: {
+    paper_id: string;
+    page_range: number[];
+  }) => {
+    const targetPage = Math.max(1, citation.page_range?.[0] || 1);
+    return `/papers/${citation.paper_id}?tab=pdf&page=${targetPage}`;
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -66,6 +190,53 @@ export default function LibraryPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    const state = loadLibraryQaState();
+    if (state) {
+      setQuestion(state.question);
+      setAskAnswer(state.askAnswer);
+      setAskConfidence(state.askConfidence);
+      setCitations(state.citations);
+      setAskError(state.askError);
+      setExpandedPapers(state.expandedPapers);
+    }
+    setQaStateHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!qaStateHydrated) return;
+    saveLibraryQaState({
+      question,
+      askAnswer,
+      askConfidence,
+      citations,
+      askError,
+      expandedPapers,
+    });
+  }, [
+    question,
+    askAnswer,
+    askConfidence,
+    citations,
+    askError,
+    expandedPapers,
+    qaStateHydrated,
+  ]);
+
+  // ポーリング処理: 処理中の論文がある場合は定期的に更新
+  useEffect(() => {
+    const hasProcessing = papers.some(
+      (p) => getPaperStatus(p) === "PROCESSING",
+    );
+    if (!hasProcessing) return;
+
+    const intervalId = setInterval(() => {
+      fetchData();
+    }, 5000); // 5秒ごとに更新
+
+    return () => clearInterval(intervalId);
+  }, [papers, fetchData]);
 
   const handleRemove = async (paper: PaperResponse) => {
     if (!confirm(`「${paper.title}」をライブラリから削除しますか？`)) return;
@@ -93,6 +264,47 @@ export default function LibraryPage() {
     }
   };
 
+  const handleAskLibrary = useCallback(async () => {
+    const q = question.trim();
+    if (!q) {
+      toast.error("質問を入力してください");
+      return;
+    }
+
+    setIsAsking(true);
+    setAskError("");
+
+    try {
+      const result = await askLibrary({ question: q, top_k: 5 });
+      setAskAnswer(result.answer);
+      setAskConfidence(result.confidence);
+      setCitations(result.citations ?? []);
+      setExpandedPapers({});
+      toast.success("質問への回答を取得しました");
+    } catch (err) {
+      console.error(err);
+      setAskAnswer("");
+      setCitations([]);
+      setExpandedPapers({});
+      setAskConfidence(0);
+      setAskError("回答の取得に失敗しました。後で再試行してください。");
+      toast.error("回答の取得に失敗しました");
+    } finally {
+      setIsAsking(false);
+    }
+  }, [question]);
+
+  const handleQuestionKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.metaKey && e.key === "Enter") {
+        e.preventDefault();
+        if (isAsking || !question.trim()) return;
+        void handleAskLibrary();
+      }
+    },
+    [handleAskLibrary, isAsking, question],
+  );
+
   if (loading) {
     return (
       <div className="p-12 text-center text-muted-foreground">
@@ -108,6 +320,21 @@ export default function LibraryPage() {
     return selectedFilter === statusLabels[status];
   });
 
+  // ソート処理
+  const sortedPapers = [...filteredPapers].sort((a, b) => {
+    if (sortMode === "title") {
+      return a.title.localeCompare(b.title, "ja");
+    }
+
+    const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+
+    if (sortMode === "created_desc") {
+      return bTime - aTime; // 新しい順
+    }
+    return aTime - bTime; // 古い順
+  });
+
   return (
     <div className="space-y-6">
       {/* ヘッダー */}
@@ -118,7 +345,33 @@ export default function LibraryPage() {
             {papers.length} 論文
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* ステータスフィルター */}
+          <div className="flex rounded-lg border border-border bg-muted/30 p-0.5">
+            {["すべて", "完了", "処理中", "失敗"].map((f) => (
+              <button
+                key={f}
+                onClick={() => setSelectedFilter(f)}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                  selectedFilter === f
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          {/* ソート */}
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-foreground"
+          >
+            <option value="title">タイトル順</option>
+            <option value="created_desc">追加日: 新しい順</option>
+            <option value="created_asc">追加日: 古い順</option>
+          </select>
           {/* ビュー切替 */}
           <div className="flex rounded-lg border border-border bg-muted/30">
             <button
@@ -169,21 +422,101 @@ export default function LibraryPage() {
         </div>
       </div>
 
-      {/* フィルターバー */}
-      <div className="flex flex-wrap gap-2">
-        {["すべて", "完了", "処理中", "失敗"].map((f) => (
+      {/* ライブラリQ&A */}
+      <div className="rounded-2xl border border-border bg-muted/20 p-4">
+        <h3 className="text-lg font-semibold mb-3">ライブラリ横断Q&A</h3>
+        <p className="text-sm text-muted-foreground mb-3">
+          ライブラリ内の論文を対象に検索して、根拠付きで回答します。
+        </p>
+        <textarea
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={handleQuestionKeyDown}
+          placeholder="例: この分野の論文はどの方法が主流ですか？"
+          className="w-full min-h-24 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+        <div className="mt-3 flex justify-end">
           <button
-            key={f}
-            onClick={() => setSelectedFilter(f)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              selectedFilter === f
-                ? "bg-primary/20 text-primary"
-                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
+            onClick={handleAskLibrary}
+            disabled={isAsking || !question.trim()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-60"
           >
-            {f}
+            {isAsking ? "生成中..." : "質問する"}
           </button>
-        ))}
+        </div>
+
+        {(askAnswer || askError) && (
+          <div className="mt-4 space-y-3">
+            <div className="rounded-lg border border-border bg-background p-3">
+              {askError ? (
+                <p className="text-sm text-red-400">{askError}</p>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Confidence: {(askConfidence * 100).toFixed(1)}%
+                  </p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {askAnswer}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {!askError && citations.length > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">根拠</p>
+                <div className="space-y-2">
+                  {groupedCitations.map((group) => (
+                    <div
+                      key={group.paperId}
+                      className="overflow-hidden rounded-lg border border-border"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => togglePaper(group.paperId)}
+                        className="flex w-full items-center justify-between bg-background/80 px-3 py-2 text-left transition-colors hover:bg-background"
+                      >
+                        <p className="text-sm text-foreground">
+                          論文: {group.title}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            ({group.items.length}
+                            件)
+                          </span>
+                        </p>
+                        <span className="text-xs text-muted-foreground">
+                          {expandedPapers[group.paperId] ? "−" : "+"}
+                        </span>
+                      </button>
+                      {expandedPapers[group.paperId] && (
+                        <div className="space-y-2 border-t border-border bg-background/70 p-3">
+                          {group.items.map((c) => (
+                            <Link
+                              key={`${c.paper_id}-${c.chunk_id}`}
+                              href={buildCitationLink(c)}
+                              className="block rounded-md border border-border/60 bg-background p-3 transition-colors hover:border-primary/40 hover:bg-muted/30"
+                            >
+                              <p className="text-xs text-muted-foreground">
+                                chunk: {c.chunk_id} / page:{" "}
+                                {c.page_range.join(", ")} / score:{" "}
+                                {c.score.toFixed(3)}
+                              </p>
+                              <p className="text-sm mt-1">{c.snippet}</p>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {groupedCitations.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      根拠が見つかりませんでした
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {papers.length === 0 ? (
@@ -196,13 +529,13 @@ export default function LibraryPage() {
             論文を検索する
           </Link>
         </div>
-      ) : filteredPapers.length === 0 ? (
+      ) : sortedPapers.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
           <p>このフィルターに該当する論文がありません。</p>
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filteredPapers.map((paper) => (
+          {sortedPapers.map((paper) => (
             <div key={paper.id} className="relative group">
               <Link href={`/papers/${paper.id}`}>
                 <div className="glass-card h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow flex flex-col">
@@ -284,7 +617,7 @@ export default function LibraryPage() {
       ) : (
         /* リストビュー */
         <div className="space-y-2">
-          {filteredPapers.map((paper) => (
+          {sortedPapers.map((paper) => (
             <div key={paper.id} className="relative group">
               <Link href={`/papers/${paper.id}`}>
                 <div className="glass-card flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
