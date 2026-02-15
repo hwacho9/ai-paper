@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { FolderPlus, NotebookPen, Search } from "lucide-react";
 import { apiGet } from "@/lib/api/client";
 import { getLibrary, PaperResponse } from "@/lib/api";
 import { getMemos, MemoResponse } from "@/lib/api";
@@ -22,6 +23,9 @@ interface ProjectListResponse {
   projects: DashboardProject[];
   total: number;
 }
+
+const SIDE_PANEL_ITEMS_PER_SECTION = 3;
+const RECENT_PAPERS_LIMIT = SIDE_PANEL_ITEMS_PER_SECTION * 2;
 
 function formatRelativeTime(dateStr: string | null): string {
   if (!dateStr) return "";
@@ -87,13 +91,15 @@ export default function DashboardPage() {
             ).getTime();
             return dateB - dateA;
           });
-          setRecentPapers(sorted.slice(0, 3));
+          setRecentPapers(sorted.slice(0, RECENT_PAPERS_LIMIT));
         }
 
         // プロジェクトデータ
         if (projectData.status === "fulfilled") {
           setProjectCount(projectData.value.total);
-          setRecentProjects(projectData.value.projects.slice(0, 3));
+          setRecentProjects(
+            projectData.value.projects.slice(0, SIDE_PANEL_ITEMS_PER_SECTION),
+          );
         }
 
         // メモデータ
@@ -108,7 +114,7 @@ export default function DashboardPage() {
             ).getTime();
             return dateB - dateA;
           });
-          setRecentMemos(sorted.slice(0, 3));
+          setRecentMemos(sorted.slice(0, SIDE_PANEL_ITEMS_PER_SECTION));
         }
       } finally {
         setLoading(false);
@@ -129,6 +135,27 @@ export default function DashboardPage() {
     { label: "メモ", value: memoCount, icon: "✏️", href: "/memos" },
   ];
 
+  const quickActions = [
+    {
+      href: "/search",
+      label: "論文を検索",
+      description: "新しい論文を見つける",
+      icon: Search,
+    },
+    {
+      href: "/projects",
+      label: "プロジェクト作成",
+      description: "テーマ別に整理する",
+      icon: FolderPlus,
+    },
+    {
+      href: "/memos",
+      label: "メモを書く",
+      description: "気づきをすぐ記録",
+      icon: NotebookPen,
+    },
+  ];
+
   return (
     <div className="space-y-8">
       {/* ウェルカムセクション */}
@@ -139,31 +166,67 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {/* クイックアクション (常に上部表示) */}
+      <div className="rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-muted/30 p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-base font-semibold">クイックアクション</h3>
+          <span className="text-xs text-muted-foreground">よく使う操作</span>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.href}
+                href={action.href}
+                className="group rounded-xl border border-border/80 bg-background/70 px-3 py-2.5 transition-all hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-tight group-hover:text-primary">
+                      {action.label}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {action.description}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
       {/* 統計カード */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {stats.map((stat) => (
-          <Link
-            key={stat.label}
-            href={stat.href}
-            className="glass-card rounded-xl p-5 transition-all duration-300 hover:scale-[1.02] hover:glow cursor-pointer"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-2xl">{stat.icon}</span>
-            </div>
-            {loading ? (
-              <div className="mt-3 h-9 w-16 animate-pulse rounded bg-muted/50" />
-            ) : (
-              <p className="mt-3 text-3xl font-bold">{stat.value}</p>
-            )}
-            <p className="mt-1 text-sm text-muted-foreground">{stat.label}</p>
-          </Link>
-        ))}
+      <div className="rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-muted/30 p-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {stats.map((stat) => (
+            <Link
+              key={stat.label}
+              href={stat.href}
+              className="glass-card rounded-xl p-5 transition-all duration-300 hover:scale-[1.02] hover:glow cursor-pointer"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-2xl">{stat.icon}</span>
+              </div>
+              {loading ? (
+                <div className="mt-3 h-9 w-16 animate-pulse rounded bg-muted/50" />
+              ) : (
+                <p className="mt-3 text-3xl font-bold">{stat.value}</p>
+              )}
+              <p className="mt-1 text-sm text-muted-foreground">{stat.label}</p>
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* メインコンテンツ 2カラム */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* 最近の論文 (2/3) */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-muted/20 p-4 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">最近の論文</h3>
             <Link
@@ -175,7 +238,7 @@ export default function DashboardPage() {
           </div>
           <div className="space-y-3">
             {loading ? (
-              [...Array(3)].map((_, i) => (
+              [...Array(RECENT_PAPERS_LIMIT)].map((_, i) => (
                 <div
                   key={i}
                   className="glass-card rounded-xl p-4 animate-pulse"
@@ -238,7 +301,7 @@ export default function DashboardPage() {
         {/* サイドパネル (1/3) */}
         <div className="space-y-6">
           {/* プロジェクト */}
-          <div>
+          <div className="rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-muted/20 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">プロジェクト</h3>
               <Link
@@ -280,7 +343,7 @@ export default function DashboardPage() {
           </div>
 
           {/* 最近のメモ */}
-          <div>
+          <div className="rounded-2xl border border-border/80 bg-gradient-to-r from-card via-card to-muted/20 p-4">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-lg font-semibold">最近のメモ</h3>
               <Link
@@ -326,39 +389,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* クイックアクション */}
-          <div>
-            <h3 className="mb-3 text-lg font-semibold">クイックアクション</h3>
-            <div className="space-y-2">
-              <Link
-                href="/search"
-                className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3 text-sm transition-all hover:bg-muted/60 hover:border-primary/30"
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary">
-                  🔍
-                </span>
-                <span>新しい論文を検索</span>
-              </Link>
-              <Link
-                href="/projects"
-                className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3 text-sm transition-all hover:bg-muted/60 hover:border-primary/30"
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary">
-                  📁
-                </span>
-                <span>プロジェクトを作成</span>
-              </Link>
-              <Link
-                href="/memos"
-                className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3 text-sm transition-all hover:bg-muted/60 hover:border-primary/30"
-              >
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary">
-                  ✏️
-                </span>
-                <span>メモを書く</span>
-              </Link>
-            </div>
-          </div>
         </div>
       </div>
     </div>
