@@ -64,8 +64,8 @@ flowchart TD
 
   subgraph Cloud["Google Cloud"]
     AUTH[Firebase Auth]
-    API[Cloud Run (FastAPI)]
-    JOB[Cloud Run Job (Ingestion Worker)]
+    API["Cloud Run (FastAPI)"]
+    JOB["Cloud Run Job (Ingestion Worker)"]
     FS[(Firestore)]
     GCS[(Cloud Storage)]
     VS["Vertex AI Vector Search"]
@@ -189,33 +189,38 @@ sequenceDiagram
   participant W as Worker Main
   participant ING as IngestService
   participant ST as Cloud Storage
-  participant PAR as PDFParser
-  participant CH as Chunker
-  participant EMB as Embedder
-  participant IDX as Indexer
+  participant P as PDFParser
+  participant C as Chunker
+  participant E as Embedder
+  participant I as Indexer
   participant DB as Firestore
   participant VS as VectorSearch
 
   API->>JOB: execute_ingest_job(paperId, ownerUid, requestId, pdfUrl)
-  JOB->>W: run_worker(...)
-  W->>ING: run_ingest(...)
-  ING->>DB: status=INGESTING
-  alt pdfUrl exists
+  JOB->>W: run_worker(paperId, ownerUid, requestId, pdfUrl)
+  W->>ING: run_ingest(request)
+  ING->>DB: set_status(INGESTING)
+
+  alt pdfUrl_exists
     ING->>ST: ensure_pdf_in_storage
   end
-  ING->>PAR: parse_pdf
-  PAR->>ST: PDF download
-  PAR-->>ING: pages_data
-  ING->>CH: create_chunks
-  ING->>EMB: generate_embeddings
-  ING->>IDX: upsert_index
-  IDX->>VS: upsert_datapoints
-  loop each chunk
-    ING->>DB: save chunk docs
+
+  ING->>P: parse_pdf()
+  P->>ST: download_pdf()
+  P-->>ING: pages_data
+
+  ING->>C: create_chunks(pages_data)
+  ING->>E: generate_embeddings(chunks)
+  ING->>I: upsert_index()
+  I->>VS: upsert_datapoints
+
+  loop for each chunk in chunks
+    ING->>DB: save_chunk(chunk)
   end
-  ING->>DB: status=READY
+
+  ING->>DB: set_status(READY)
   alt failure
-    ING->>DB: status=FAILED
+    ING->>DB: set_status(FAILED)
   end
 ```
 
@@ -251,10 +256,10 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  W --> M[POST /api/v1/memos]
+  W --> M["POST /api/v1/memos"]
   M --> S[MemoService]
   S --> DB[(Firestore)]
-  W --> V[GET /api/v1/memos/{id}]
+  W --> V["GET /api/v1/memos/{id}"]
 ```
 
 ### D-09 Reading Support
