@@ -59,7 +59,7 @@ deploy_api() {
     --min-instances 0 \
     --max-instances 10 \
     --timeout 60s \
-    --set-env-vars "^@@^GCP_PROJECT_ID=${PROJECT_ID}@@GCP_REGION=${REGION}@@CORS_ALLOW_ORIGINS=${API_CORS_ORIGINS}@@GCS_BUCKET_PDF=${GCS_BUCKET_PDF:-}@@GOOGLE_API_KEY=${GOOGLE_API_KEY:-}@@GOOGLE_MODEL_NAME=${GOOGLE_MODEL_NAME:-gemini-2.5-flash}@@PUBMED_API_KEY=${PUBMED_API_KEY:-}@@VECTOR_INDEX_ID=${VECTOR_INDEX_ID:-}@@VECTOR_INDEX_ENDPOINT_ID=${VECTOR_INDEX_ENDPOINT_ID:-}" \
+    --set-env-vars "^@@^GCP_PROJECT_ID=${PROJECT_ID}@@GCP_REGION=${REGION}@@CORS_ALLOW_ORIGINS=${API_CORS_ORIGINS}@@CLOUD_RUN_JOB_NAME=${CLOUD_RUN_JOB_NAME:-}@@GCS_BUCKET_PDF=${GCS_BUCKET_PDF:-}@@GOOGLE_API_KEY=${GOOGLE_API_KEY:-}@@GOOGLE_MODEL_NAME=${GOOGLE_MODEL_NAME:-gemini-2.5-flash}@@PUBMED_API_KEY=${PUBMED_API_KEY:-}@@VECTOR_INDEX_ID=${VECTOR_INDEX_ID:-}@@VECTOR_INDEX_ENDPOINT_ID=${VECTOR_INDEX_ENDPOINT_ID:-}" \
     --service-account "$API_SERVICE_ACCOUNT" \
     --ingress all \
     --allow-unauthenticated \
@@ -122,15 +122,18 @@ deploy_web() {
 }
 
 deploy_worker() {
-  echo "🚀 Workerジョブをデプロイ中..."
-  local IMAGE="${REGISTRY}/ingest-worker:$(git rev-parse --short HEAD 2>/dev/null || echo latest)"
+  echo "🚀 Workerジョブをデプロイ中 (paper-ingest-worker)..."
+  local IMAGE="${REGISTRY}/paper-ingest-worker:$(git rev-parse --short HEAD 2>/dev/null || echo latest)"
 
   # ビルド + プッシュ（Cloud RunはAMD64のみ対応、provenance無効でOCI互換性確保）
   docker build --platform linux/amd64 --provenance=false -t "$IMAGE" -f "$ROOT_DIR/apps/api/Dockerfile.worker" "$ROOT_DIR/apps/api"
   docker push "$IMAGE"
 
-  # Cloud Run Jobs デプロイ
-  gcloud run jobs create ingest-worker \
+  # Worker用環境変数（値にカンマが含まれない前提）
+  local WORKER_ENV="GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION},FIRESTORE_DB=(default),GCS_BUCKET_PDF=${GCS_BUCKET_PDF:-},GOOGLE_API_KEY=${GOOGLE_API_KEY:-},GOOGLE_MODEL_NAME=${GOOGLE_MODEL_NAME:-gemini-2.5-flash},VECTOR_INDEX_ID=${VECTOR_INDEX_ID:-},VECTOR_INDEX_ENDPOINT_ID=${VECTOR_INDEX_ENDPOINT_ID:-}"
+
+  # Cloud Run Jobs デプロイ（既存の paper-ingest-worker を更新）
+  gcloud run jobs create paper-ingest-worker \
     --image "$IMAGE" \
     --project "$PROJECT_ID" \
     --region "$REGION" \
@@ -138,10 +141,10 @@ deploy_worker() {
     --memory 2Gi \
     --task-timeout 1800s \
     --max-retries 3 \
-    --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION}" \
+    --set-env-vars "$WORKER_ENV" \
     --service-account "$WORKER_SERVICE_ACCOUNT" \
     --quiet 2>/dev/null || \
-  gcloud run jobs update ingest-worker \
+  gcloud run jobs update paper-ingest-worker \
     --image "$IMAGE" \
     --project "$PROJECT_ID" \
     --region "$REGION" \
@@ -149,11 +152,11 @@ deploy_worker() {
     --memory 2Gi \
     --task-timeout 1800s \
     --max-retries 3 \
-    --set-env-vars "GCP_PROJECT_ID=${PROJECT_ID},GCP_REGION=${REGION}" \
+    --set-env-vars "$WORKER_ENV" \
     --service-account "$WORKER_SERVICE_ACCOUNT" \
     --quiet
 
-  echo "✅ Workerデプロイ完了"
+  echo "✅ Workerデプロイ完了 (paper-ingest-worker)"
 }
 
 # ===== メイン =====

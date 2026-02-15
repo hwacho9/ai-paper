@@ -43,35 +43,30 @@ async def execute_ingest_job(paper_id: str, owner_uid: str, request_id: str, pdf
         return
 
     try:
-        # run_v2.JobsClient calls are synchronous gRPC calls usually, 
-        # but we can run them in a thread if needed. 
-        # For now, keeping it simple as it's just an API call.
         client = run_v2.JobsClient()
         
         # Jobのフルパス名: projects/{project}/locations/{location}/jobs/{job_name}
         name = client.job_path(project_id, location, job_name)
         
+        # 環境変数オーバーライド（protobuf型を使用）
         env_vars = [
-            {"name": "PAPER_ID", "value": paper_id},
-            {"name": "OWNER_UID", "value": owner_uid},
-            {"name": "REQUEST_ID", "value": request_id},
+            run_v2.EnvVar(name="PAPER_ID", value=paper_id),
+            run_v2.EnvVar(name="OWNER_UID", value=owner_uid),
+            run_v2.EnvVar(name="REQUEST_ID", value=request_id),
         ]
         
         if pdf_url:
-            env_vars.append({"name": "PDF_URL", "value": pdf_url})
+            env_vars.append(run_v2.EnvVar(name="PDF_URL", value=pdf_url))
         
-        # 環境変数の上書き設定
-        overrides = {
-            "container_overrides": [
-                {
-                    "env": env_vars
-                }
-            ]
-        }
+        container_override = run_v2.RunJobRequest.Overrides.ContainerOverride(
+            env=env_vars,
+        )
 
         request = run_v2.RunJobRequest(
             name=name,
-            overrides=overrides
+            overrides=run_v2.RunJobRequest.Overrides(
+                container_overrides=[container_override],
+            ),
         )
 
         operation = client.run_job(request=request)
