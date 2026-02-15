@@ -21,6 +21,7 @@ import { toast } from "sonner";
 const SEARCH_HISTORY_KEY = "paper-search-history";
 const MAX_HISTORY_ITEMS = 10;
 const SEARCH_SOURCE_KEY = "paper-search-source";
+const SEARCH_PAGE_STATE_KEY = "paper-search-page-state-v1";
 const ORGANIZED_SWITCH_DELAY_MS = 1500;
 const SOURCE_OPTIONS = [
   { value: "auto", label: "Auto（分野優先）" },
@@ -32,12 +33,16 @@ const SOURCE_OPTIONS = [
 
 type SearchSource = (typeof SOURCE_OPTIONS)[number]["value"];
 type ResultMode = "list" | "organized";
-
-function formatCitations(count: number | null): string {
-  if (!count) return "0";
-  if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
-  return String(count);
-}
+type SearchPageState = {
+  query: string;
+  results: SearchResultItem[];
+  organizedClusters: SearchCluster[];
+  organizedFallbackUsed: boolean;
+  hasSearched: boolean;
+  searchSource: SearchSource;
+  resultMode: ResultMode;
+  showOrganizedSwitch: boolean;
+};
 
 function loadSearchHistory(): string[] {
   if (typeof window === "undefined") return [];
@@ -58,6 +63,52 @@ function saveSearchHistory(history: string[]): void {
   }
 }
 
+function loadSearchPageState(): SearchPageState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = sessionStorage.getItem(SEARCH_PAGE_STATE_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<SearchPageState>;
+    if (
+      typeof parsed.query !== "string" ||
+      !Array.isArray(parsed.results) ||
+      !Array.isArray(parsed.organizedClusters)
+    ) {
+      return null;
+    }
+
+    const availableSources = SOURCE_OPTIONS.map((option) => option.value) as
+      | readonly SearchSource[]
+      | string[];
+    const nextSource = availableSources.includes(parsed.searchSource as string)
+      ? (parsed.searchSource as SearchSource)
+      : "auto";
+    const nextMode = parsed.resultMode === "organized" ? "organized" : "list";
+
+    return {
+      query: parsed.query,
+      results: parsed.results as SearchResultItem[],
+      organizedClusters: parsed.organizedClusters as SearchCluster[],
+      organizedFallbackUsed: Boolean(parsed.organizedFallbackUsed),
+      hasSearched: Boolean(parsed.hasSearched),
+      searchSource: nextSource,
+      resultMode: nextMode,
+      showOrganizedSwitch: Boolean(parsed.showOrganizedSwitch),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveSearchPageState(state: SearchPageState): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(SEARCH_PAGE_STATE_KEY, JSON.stringify(state));
+  } catch {
+    console.warn("Failed to save search page state");
+  }
+}
+
 export default function SearchPage() {
   const { user } = useAuth();
   const [query, setQuery] = useState("");
@@ -75,6 +126,7 @@ export default function SearchPage() {
   const [resultMode, setResultMode] = useState<ResultMode>("list");
   const [showOrganizedSwitch, setShowOrganizedSwitch] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [stateHydrated, setStateHydrated] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const organizedSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -88,6 +140,21 @@ export default function SearchPage() {
   // 初期化時に検索履歴を読み込む
   useEffect(() => {
     setSearchHistory(loadSearchHistory());
+
+    const storedPageState = loadSearchPageState();
+    if (storedPageState) {
+      setQuery(storedPageState.query);
+      setResults(storedPageState.results);
+      setOrganizedClusters(storedPageState.organizedClusters);
+      setOrganizedFallbackUsed(storedPageState.organizedFallbackUsed);
+      setHasSearched(storedPageState.hasSearched);
+      setSearchSource(storedPageState.searchSource);
+      setResultMode(storedPageState.resultMode);
+      setShowOrganizedSwitch(storedPageState.showOrganizedSwitch);
+      setStateHydrated(true);
+      return;
+    }
+
     const storedSource = localStorage.getItem(SEARCH_SOURCE_KEY);
     if (
       storedSource &&
@@ -97,7 +164,32 @@ export default function SearchPage() {
     ) {
       setSearchSource(storedSource as SearchSource);
     }
+    setStateHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!stateHydrated) return;
+    saveSearchPageState({
+      query,
+      results,
+      organizedClusters,
+      organizedFallbackUsed,
+      hasSearched,
+      searchSource,
+      resultMode,
+      showOrganizedSwitch,
+    });
+  }, [
+    query,
+    results,
+    organizedClusters,
+    organizedFallbackUsed,
+    hasSearched,
+    searchSource,
+    resultMode,
+    showOrganizedSwitch,
+    stateHydrated,
+  ]);
 
   // クリックアウトでサジェストを非表示
   useEffect(() => {
@@ -317,9 +409,9 @@ export default function SearchPage() {
       {/* 検索フォーム */}
       <form onSubmit={handleSearch} className="mx-auto max-w-2xl">
         <div className="relative space-y-2">
-          <div className="rounded-xl border border-border bg-card px-3 py-2 flex items-stretch gap-3">
+          <div className="rounded-xl border border-border bg-card px-3 py-2 flex items-center gap-3">
             <svg
-              className="h-5 w-5 flex-shrink-0 text-muted-foreground"
+              className="h-5 w-5 flex-shrink-0 self-center text-muted-foreground"
               fill="none"
               viewBox="0 0 24 24"
               strokeWidth={1.5}
@@ -338,7 +430,7 @@ export default function SearchPage() {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setShowSuggestions(true)}
               placeholder="キーワード、タイトル、著者名..."
-              className="min-w-0 flex-1 bg-transparent py-1.5 text-base outline-none"
+              className="min-w-0 flex-1 bg-transparent py-2 text-base outline-none"
             />
             <button
               type="submit"
@@ -348,11 +440,8 @@ export default function SearchPage() {
               {loading ? "検索中..." : "検索"}
             </button>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <label className="text-sm text-muted-foreground mr-2 self-center">
-              検索ソース
-            </label>
-            <div className="inline-flex rounded-lg border border-border bg-card/60 p-1">
+          <div className="flex justify-center pt-1">
+            <div className="inline-flex items-center rounded-full border border-border/70 bg-muted/40 p-1">
               {SOURCE_OPTIONS.map((option) => {
                 const selected = searchSource === option.value;
                 return (
@@ -364,10 +453,10 @@ export default function SearchPage() {
                       setSearchSource(nextSource);
                       localStorage.setItem(SEARCH_SOURCE_KEY, nextSource);
                     }}
-                    className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
                       selected
                         ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-muted/60"
+                        : "text-muted-foreground hover:bg-background/70"
                     }`}
                   >
                     {option.label}
@@ -524,9 +613,6 @@ export default function SearchPage() {
                       <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
                         <span className="rounded-md bg-muted px-2 py-1 font-medium">
                           {paper.venue || "Unknown Venue"} {paper.year || ""}
-                        </span>
-                        <span className="text-muted-foreground">
-                          引用: {formatCitations(paper.citation_count)}
                         </span>
                         {paper.pdf_url && (
                           <a
