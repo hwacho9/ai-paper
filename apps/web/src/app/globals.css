@@ -47,9 +47,48 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-/* ===== ダークテーマ (デフォルト) ===== */
+/* ===== ライトテーマ (デフォルト) ===== */
 :root {
   --radius: 0.625rem;
+  --background: oklch(0.98 0.003 260);
+  --foreground: oklch(0.17 0.008 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.17 0.008 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.17 0.008 260);
+  --primary: oklch(0.55 0.2 260);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.95 0.006 260);
+  --secondary-foreground: oklch(0.2 0.01 260);
+  --muted: oklch(0.96 0.005 260);
+  --muted-foreground: oklch(0.45 0.015 260);
+  --accent: oklch(0.95 0.01 260);
+  --accent-foreground: oklch(0.2 0.01 260);
+  --destructive: oklch(0.65 0.2 25);
+  --border: oklch(0.88 0.008 260);
+  --input: oklch(0.9 0.008 260);
+  --ring: oklch(0.65 0.2 260);
+  --chart-1: oklch(0.65 0.2 260);
+  --chart-2: oklch(0.58 0.17 165);
+  --chart-3: oklch(0.7 0.18 80);
+  --chart-4: oklch(0.58 0.2 305);
+  --chart-5: oklch(0.62 0.2 20);
+  --sidebar: oklch(0.98 0.003 260);
+  --sidebar-foreground: oklch(0.2 0.01 260);
+  --sidebar-primary: oklch(0.65 0.2 260);
+  --sidebar-primary-foreground: oklch(0.98 0 0);
+  --sidebar-accent: oklch(0.94 0.01 260);
+  --sidebar-accent-foreground: oklch(0.2 0.01 260);
+  --sidebar-border: oklch(0.88 0.008 260);
+  --sidebar-ring: oklch(0.65 0.2 260);
+  --glass-bg: oklch(1 0 0 / 88%);
+  --glass-border: oklch(0.86 0.008 260 / 70%);
+  --glow-1: oklch(0.62 0.16 260 / 12%);
+  --glow-2: oklch(0.62 0.16 260 / 4%);
+}
+
+/* ===== ダークテーマ ===== */
+.dark {
   --background: oklch(0.13 0.005 260);
   --foreground: oklch(0.95 0.01 260);
   --card: oklch(0.17 0.008 260);
@@ -81,6 +120,10 @@
   --sidebar-accent-foreground: oklch(0.93 0.01 260);
   --sidebar-border: oklch(0.22 0.008 260);
   --sidebar-ring: oklch(0.65 0.2 260);
+  --glass-bg: oklch(0.17 0.008 260 / 60%);
+  --glass-border: oklch(0.3 0.01 260 / 40%);
+  --glow-1: oklch(0.65 0.2 260 / 15%);
+  --glow-2: oklch(0.65 0.2 260 / 5%);
 }
 
 @layer base {
@@ -104,16 +147,16 @@
 
 /* ガラスモーフィズムカード */
 .glass-card {
-  background: oklch(0.17 0.008 260 / 60%);
+  background: var(--glass-bg);
   backdrop-filter: blur(16px);
-  border: 1px solid oklch(0.3 0.01 260 / 40%);
+  border: 1px solid var(--glass-border);
 }
 
 /* グロー効果 */
 .glow {
   box-shadow:
-    0 0 20px oklch(0.65 0.2 260 / 15%),
-    0 0 60px oklch(0.65 0.2 260 / 5%);
+    0 0 20px var(--glow-1),
+    0 0 60px var(--glow-2);
 }
 
 /* スクロールバー */

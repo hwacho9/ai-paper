@@ -55,7 +55,7 @@ export function KeywordRelatedGroupList({
                                             {paper.paper_keywords.map((tag) => (
                                                 <span
                                                     key={`paper-${paper.paper_id}-${tag}`}
-                                                    className="inline-flex rounded-full border border-sky-300/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-200">
+                                                    className="inline-flex rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-300/30 dark:bg-sky-500/10 dark:text-sky-200">
                                                     {tag}
                                                 </span>
                                             ))}
@@ -69,7 +69,7 @@ export function KeywordRelatedGroupList({
                                                 {paper.prerequisite_keywords.map((tag) => (
                                                     <span
                                                         key={`pre-${paper.paper_id}-${tag}`}
-                                                        className="inline-flex rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-200">
+                                                        className="inline-flex rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-300/30 dark:bg-amber-500/10 dark:text-amber-200">
                                                         {tag}
                                                     </span>
                                                 ))}

@@ -671,7 +671,7 @@ export default function SearchPage() {
                         return (
                       <button
                         onClick={() => handleLike(paper)}
-                        className={`rounded-lg p-2 transition-all hover:scale-110 ${
+                        className={`rounded-md px-2 py-1 text-sm leading-none transition-all ${
                           isLiked
                             ? "bg-primary/20 text-primary"
                             : "bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary"
@@ -682,7 +682,7 @@ export default function SearchPage() {
                             : "ライブラリに追加"
                         }
                       >
-                        {isLiked ? "❤️" : "🤍"}
+                        {isLiked ? "❤️ 保存済み" : "🤍 保存"}
                       </button>
                         );
                       })()}

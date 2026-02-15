@@ -62,6 +62,8 @@ export default function GraphPage() {
 
     const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
     const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+    const selectedNodeRef = useRef<GraphNode | null>(null);
+    const hoveredNodeRef = useRef<string | null>(null);
     const [selectedProjectId, setSelectedProjectId] = useState("");
     const [projectActionLoading, setProjectActionLoading] = useState<{
         type: "add" | "remove";
@@ -76,6 +78,14 @@ export default function GraphPage() {
         offsetX: number;
         offsetY: number;
     }>({ nodeId: null, offsetX: 0, offsetY: 0 });
+
+    useEffect(() => {
+        selectedNodeRef.current = selectedNode;
+    }, [selectedNode]);
+
+    useEffect(() => {
+        hoveredNodeRef.current = hoveredNode;
+    }, [hoveredNode]);
 
     // 1. Fetch Data
     useEffect(() => {
@@ -192,14 +202,21 @@ export default function GraphPage() {
         window.addEventListener("resize", resizeCanvas);
 
         // 簡易力学シミュレーション
-        const simulate = () => {
+        const simulate = (options?: {
+            damping?: number;
+            repulsionScale?: number;
+            attractionScale?: number;
+            centerGravityScale?: number;
+            maxVelocity?: number;
+        }) => {
             const nodes = nodesRef.current;
             const currentEdges = edgesRef.current;
 
-            const damping = 0.9;
-            const repulsion = 4000;
-            const attraction = 0.01; // 더 강한 연결력으로 밀집도/가독성 개선
-            const centerGravity = 0.005;
+            const damping = options?.damping ?? 0.9;
+            const repulsion = 4000 * (options?.repulsionScale ?? 1);
+            const attraction = 0.01 * (options?.attractionScale ?? 1); // Equilibrium length 100
+            const centerGravity = 0.005 * (options?.centerGravityScale ?? 1);
+            const maxVelocity = options?.maxVelocity ?? 14;
 
             const cx = canvas.width / 2;
             const cy = canvas.height / 2;
@@ -228,10 +245,10 @@ export default function GraphPage() {
                 if (!source || !target) continue;
                 const dx = target.x - source.x;
                 const dy = target.y - source.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+                const dist = Math.sqrt(dx * dx + dy * dy) + 0.1;
 
                 // Spring force
-                const force = (dist - 100) * attraction * edge.strength; // Equilibrium length 100
+                const force = (dist - 100) * attraction * edge.strength;
 
                 source.vx += (dx / dist) * force;
                 source.vy += (dy / dist) * force;
@@ -242,6 +259,9 @@ export default function GraphPage() {
             // 位置更新
             for (const node of nodes) {
                 if (dragRef.current.nodeId === node.id) continue;
+                // 速度を制限して初期暴れを抑える
+                node.vx = Math.max(-maxVelocity, Math.min(maxVelocity, node.vx));
+                node.vy = Math.max(-maxVelocity, Math.min(maxVelocity, node.vy));
                 node.vx *= damping;
                 node.vy *= damping;
                 node.x += node.vx;
@@ -259,6 +279,17 @@ export default function GraphPage() {
             }
         };
 
+        // 初回表示前にレイアウトを収束させる
+        for (let i = 0; i < 180; i++) {
+            simulate({
+                damping: 0.84,
+                repulsionScale: 0.65,
+                attractionScale: 1.15,
+                centerGravityScale: 1.1,
+                maxVelocity: 7,
+            });
+        }
+
         // 描画
         const draw = () => {
             const nodes = nodesRef.current;
@@ -272,10 +303,12 @@ export default function GraphPage() {
                 const target = nodes.find((n) => n.id === edge.target);
                 if (!source || !target) continue;
 
+                const hovered = hoveredNodeRef.current;
+                const selected = selectedNodeRef.current;
                 const isHoveredEdge =
-                    hoveredNode === source.id || hoveredNode === target.id;
+                    hovered === source.id || hovered === target.id;
                 const isSelectedEdge =
-                    selectedNode?.id === source.id || selectedNode?.id === target.id;
+                    selected?.id === source.id || selected?.id === target.id;
                 const isHighlighted = isHoveredEdge || isSelectedEdge;
                 const lineWeight = Math.max(
                     0,
@@ -308,8 +341,8 @@ export default function GraphPage() {
                 const isOwned = node.type === "owned";
                 const isRelated = node.type === "related";
 
-                const isHovered = hoveredNode === node.id;
-                const isSelected = selectedNode?.id === node.id;
+                const isHovered = hoveredNodeRef.current === node.id;
+                const isSelected = selectedNodeRef.current?.id === node.id;
 
                 // Size
                 let radius = 20;
@@ -434,6 +467,7 @@ export default function GraphPage() {
             }
 
             const found = findNode(x, y);
+            hoveredNodeRef.current = found?.id || null;
             setHoveredNode(found?.id || null);
             canvas.style.cursor = found ? "pointer" : "default";
         };
@@ -449,6 +483,7 @@ export default function GraphPage() {
                     offsetX: x - found.x,
                     offsetY: y - found.y,
                 };
+                selectedNodeRef.current = found;
                 setSelectedNode(found);
             }
         };
@@ -475,7 +510,7 @@ export default function GraphPage() {
             canvas.removeEventListener("mousedown", handleMouseDown);
             canvas.removeEventListener("mouseup", handleMouseUp);
         };
-    }, [hoveredNode, selectedNode]); // Removed nodes/edges from dependency to avoid loop restart on small updates, using refs
+    }, []); // Hover/selection updates are handled through refs to avoid loop restart
 
     const projectNodes = useMemo(
         () => nodes.filter((node) => node.type === "project"),
@@ -732,11 +767,7 @@ export default function GraphPage() {
                                                         onClick={() =>
                                                             setSelectedProjectId(id)
                                                         }
-                                                        className={`rounded-full border px-2 py-0.5 text-[10px] transition-colors ${
-                                                            selectedProjectId === id
-                                                                ? "border-teal-400/60 bg-teal-500/20 text-teal-200"
-                                                                : "border-teal-500/30 bg-teal-500/10 text-teal-300"
-                                                        }`}>
+                                                        className="rounded-full border border-teal-300 bg-teal-50 px-2 py-0.5 text-[10px] text-teal-700 transition-colors dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300">
                                                         {projectTitleMap.get(id) || "不明"}
                                                     </button>
                                                 ))}
@@ -791,7 +822,7 @@ export default function GraphPage() {
                                                                         projectActionLoading !==
                                                                         null
                                                                     }
-                                                                    className="rounded bg-rose-500/20 px-2 py-1 text-[10px] font-medium text-rose-300 disabled:opacity-50">
+                                                                    className="rounded border border-rose-300 bg-rose-50 px-2 py-1 text-[10px] font-medium text-rose-700 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/20 dark:text-rose-300">
                                                                     {projectActionLoading
                                                                         ?.type === "remove" &&
                                                                     projectActionLoading.projectId ===
@@ -810,7 +841,7 @@ export default function GraphPage() {
                                                                         projectActionLoading !==
                                                                         null
                                                                     }
-                                                                    className="rounded bg-emerald-500/20 px-2 py-1 text-[10px] font-medium text-emerald-300 disabled:opacity-50">
+                                                                    className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-700 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-300">
                                                                     {projectActionLoading
                                                                         ?.type === "add" &&
                                                                     projectActionLoading.projectId ===
@@ -922,7 +953,7 @@ export default function GraphPage() {
                                 onChange={(e) =>
                                     setShowRelated(e.target.checked)
                                 }
-                                className="rounded border-border accent-teal-500"
+                                className="rounded border-border accent-teal-700"
                             />
                             関連研究 (プロジェクト内含む)
                         </label>
