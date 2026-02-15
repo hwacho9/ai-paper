@@ -23,6 +23,7 @@ class SearchResultItem(BaseModel):
     doi: str | None
     arxiv_id: str | None
     pdf_url: str | None
+    url: str | None = None
     citation_count: int | None
     is_in_library: bool = False
 

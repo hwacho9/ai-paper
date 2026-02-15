@@ -51,68 +51,154 @@ class PubmedClient(BaseSearchClient):
             return data.get("esearchresult", {}).get("idlist", [])
 
     async def _get_details(self, ids: list[str]) -> list[SearchResult]:
+        if not ids:
+            return []
+            
         params = {
             "db": self.DB,
             "id": ",".join(ids),
-            "retmode": "json"
+            "retmode": "xml"  # Use XML to get full abstract and structured data
         }
         if self.api_key:
             params["api_key"] = self.api_key
+            
+        # Use EFETCH instead of ESUMMARY for details
+        url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+        
         async with httpx.AsyncClient() as client:
-            response = await client.get(self.BASE_URL_SUMMARY, params=params, timeout=10.0)
+            response = await client.get(url, params=params, timeout=15.0)
             response.raise_for_status()
-            data = response.json()
+            
+            # Parse XML
+            try:
+                root = ET.fromstring(response.content)
+            except ET.ParseError as e:
+                print(f"PubMed XML Parse Error: {e}")
+                return []
             
             results = []
-            uids = data.get("result", {}).get("uids", [])
-            for uid in uids:
-                item = data["result"][uid]
+            
+            # PubmedArticleSet -> PubmedArticle
+            for article in root.findall(".//PubmedArticle"):
+                medline = article.find("MedlineCitation")
+                if medline is None:
+                    continue
                 
-                # Extract fields
-                title = item.get("title", "")
-                authors = [a.get("name") for a in item.get("authors", [])]
-                pub_date = item.get("pubdate", "")
-                year = int(pub_date.split()[0]) if pub_date else None
-                venue = item.get("source", "")
-                doi = next((id["value"] for id in item.get("elocationid", []) if id.get("etype") == "doi"), None) # Sometimes here
-                if not doi:
-                     # Check articleids
-                    for aid in item.get("articleids", []):
-                        if aid.get("idtype") == "doi":
-                            doi = aid.get("value")
-                            break
-
-                external_ids = {"PubMed": uid}
-                if doi:
-                    external_ids["DOI"] = doi
+                article_data = medline.find("Article")
+                if article_data is None:
+                    continue
                 
-                # Abstract (esummary JSON doesn't always contain abstract properly, might need efetch XML for full abstract)
-                # For MVP, we use title or partial info if available. 
-                # Ideally, we should use EFETCH for abstracts, but JSON output of efetch is not standard.
-                # Let's start with empty abstract or title as fallback.
-                abstract = "" 
+                # Title
+                title_elem = article_data.find("ArticleTitle")
+                title = title_elem.text if title_elem is not None else ""
+                
+                # Abstract
+                abstract_text = ""
+                abstract_elem = article_data.find("Abstract")
+                if abstract_elem is not None:
+                    texts = []
+                    for text_elem in abstract_elem.findall("AbstractText"):
+                        if text_elem.text:
+                            label = text_elem.get("Label")
+                            txt = text_elem.text
+                            if label:
+                                texts.append(f"{label}: {txt}")
+                            else:
+                                texts.append(txt)
+                    abstract_text = "\n".join(texts)
+                
+                # Authors
+                authors = []
+                author_list = article_data.find("AuthorList")
+                if author_list is not None:
+                    for author in author_list.findall("Author"):
+                        # Try parsing various name formats
+                        last_name = author.find("LastName")
+                        fore_name = author.find("ForeName")
+                        collective_name = author.find("CollectiveName")
+                        
+                        name_parts = []
+                        if fore_name is not None and fore_name.text:
+                            name_parts.append(fore_name.text)
+                        if last_name is not None and last_name.text:
+                            name_parts.append(last_name.text)
+                        
+                        if name_parts:
+                            authors.append(" ".join(name_parts))
+                        elif collective_name is not None and collective_name.text:
+                            authors.append(collective_name.text)
 
-                # PDF URL (PubMed doesn't give direct PDF url easily)
+                # Date
+                year = None
+                journal = article_data.find("Journal")
+                if journal is not None:
+                    journal_issue = journal.find("JournalIssue")
+                    if journal_issue is not None:
+                        pub_date = journal_issue.find("PubDate")
+                        if pub_date is not None:
+                            year_elem = pub_date.find("Year")
+                            if year_elem is not None and year_elem.text:
+                                try:
+                                    year = int(year_elem.text)
+                                except ValueError:
+                                    pass
+                
+                # Venue/Journal Title
+                venue = ""
+                if journal is not None:
+                    iso_abbrev = journal.find("ISOAbbreviation")
+                    if iso_abbrev is not None and iso_abbrev.text:
+                        venue = iso_abbrev.text
+                    else:
+                        j_title = journal.find("Title")
+                        if j_title is not None and j_title.text:
+                            venue = j_title.text
+
+                # IDs (DOI, PMID, PMC)
+                external_ids = {}
+                pmid_elem = medline.find("PMID")
+                if pmid_elem is not None and pmid_elem.text:
+                    external_ids["PubMed"] = pmid_elem.text
+
+                # Check PubmedData for other IDs
+                pubmed_data = article.find("PubmedData")
+                id_list = pubmed_data.find("ArticleIdList") if pubmed_data is not None else None
+                
+                pmc_id = None
+                if id_list is not None:
+                    for aid in id_list.findall("ArticleId"):
+                        id_type = aid.get("IdType")
+                        id_val = aid.text
+                        if id_type == "doi" and id_val:
+                            external_ids["DOI"] = id_val
+                        elif id_type == "pmc" and id_val:
+                            pmc_id = id_val # e.g. "PMC1234567"
+                            # external_ids["PMC"] = pmc_id # Optional to store
+
+                # PDF URL (Only if PMC ID exists)
                 pdf_url = None
-                citation_count = None
-                for key in ("pmcrefcount", "citedbycount", "citation_count", "citationCount"):
-                    value = item.get(key)
-                    if value is None:
-                        continue
-                    try:
-                        citation_count = int(value)
-                    except (TypeError, ValueError):
-                        citation_count = None
-                    break
+                if pmc_id:
+                    # Construct PMC PDF URL (Standardized format)
+                    pdf_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmc_id}/pdf/"
                 
+                # Fallback URL (Prioritize DOI as requested by user)
+                url = None
+                if "DOI" in external_ids:
+                    url = f"https://doi.org/{external_ids['DOI']}"
+                elif "PubMed" in external_ids:
+                    url = f"https://pubmed.ncbi.nlm.nih.gov/{external_ids['PubMed']}/"
+
+                citation_count = None # efetch XML doesn't contain citation count usually
+
                 results.append(SearchResult(
                     title=title,
                     authors=authors,
                     year=year,
                     venue=venue,
-                    abstract=abstract,
+                    abstract=abstract_text,
                     external_ids=external_ids,
                     pdf_url=pdf_url,
+                    url=url,
                     citation_count=citation_count,
                     source="pubmed"
                 ))

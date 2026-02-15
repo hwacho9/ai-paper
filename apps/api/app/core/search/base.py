@@ -11,6 +11,7 @@ class SearchResult(BaseModel):
     abstract: str = ""
     external_ids: dict[str, str] = {} # {"ArXiv": "...", "DOI": "..."}
     pdf_url: str | None = None
+    url: str | None = None
     citation_count: int | None = None
     source: str
 

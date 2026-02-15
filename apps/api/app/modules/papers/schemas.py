@@ -16,6 +16,7 @@ class PaperCreate(BaseModel):
     doi: str | None = None
     arxiv_id: str | None = None
     pdf_url: str | None = None
+    url: str | None = None
     keywords: list[str] = []
     prerequisite_keywords: list[str] = []
 
@@ -31,6 +32,7 @@ class PaperResponse(BaseModel):
     doi: str | None
     arxiv_id: str | None
     pdf_url: str | None
+    url: str | None = None
     status: str = "PENDING" # PENDING, INGESTING, READY, FAILED
     is_liked: bool = False
     keywords: list[str] = []

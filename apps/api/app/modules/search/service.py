@@ -306,6 +306,7 @@ class SearchService:
             doi=result.external_ids.get("DOI"),
             arxiv_id=result.external_ids.get("ArXiv"),
             pdf_url=result.pdf_url,
+            url=result.url,
             citation_count=result.citation_count,
             is_in_library=is_in_library
         )
