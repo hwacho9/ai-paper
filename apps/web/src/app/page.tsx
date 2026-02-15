@@ -54,6 +54,24 @@ const statusLabels: Record<string, string> = {
   FAILED: "失敗",
 };
 
+function normalizePaperId(rawId: string): string {
+  let next = rawId;
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const decoded = decodeURIComponent(next);
+      if (decoded === next) return decoded;
+      next = decoded;
+    } catch {
+      return next;
+    }
+  }
+  return next;
+}
+
+function getPaperDetailPath(paperId: string): string {
+  return `/papers/${encodeURIComponent(normalizePaperId(paperId))}`;
+}
+
 export default function DashboardPage() {
   const [recentProjects, setRecentProjects] = useState<DashboardProject[]>([]);
   const [recentPapers, setRecentPapers] = useState<PaperResponse[]>([]);
@@ -201,7 +219,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               recentPapers.map((paper) => (
-                <Link key={paper.id} href={`/papers/${paper.id}`}>
+                <Link key={paper.id} href={getPaperDetailPath(paper.id)}>
                   <div className="group glass-card rounded-xl p-4 transition-all duration-200 hover:scale-[1.01] hover:border-primary/30">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">

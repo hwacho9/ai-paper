@@ -84,7 +84,7 @@ async def add_paper_to_project(
     )
 
 
-@router.delete("/projects/{project_id}/papers/{paper_id}", status_code=204)
+@router.delete("/projects/{project_id}/papers/{paper_id:path}", status_code=204)
 async def remove_paper_from_project(
     project_id: str,
     paper_id: str,

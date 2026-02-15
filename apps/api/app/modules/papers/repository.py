@@ -2,6 +2,7 @@
 D-03: ペーパーライブラリ - リポジトリ
 """
 from datetime import datetime, timezone
+from urllib.parse import quote
 from google.cloud.firestore import AsyncClient, Transaction
 from app.core.firestore import get_firestore_client
 
@@ -13,28 +14,42 @@ class PaperRepository:
     def _get_db(self) -> AsyncClient:
         return get_firestore_client()
 
+    def _sanitize_id(self, paper_id: str) -> str:
+        """
+        Sanitize paper_id for Firestore usage.
+        Firestore document IDs cannot contain '/'.
+        If the ID contains '/', we assume it needs encoding (e.g. decoded from URL param).
+        If it doesn't contain '/', we assume it's already encoded or safe.
+        """
+        if "/" in paper_id:
+            # Keep ':' safe for readability (e.g. doi:...)
+            return quote(paper_id, safe=":")
+        return paper_id
+
     async def get_by_id(self, paper_id: str) -> dict | None:
         """IDで論文を取得"""
-        doc_ref = self._get_db().collection(self.COLLECTION_PAPERS).document(paper_id)
+        safe_id = self._sanitize_id(paper_id)
+        doc_ref = self._get_db().collection(self.COLLECTION_PAPERS).document(safe_id)
         doc = await doc_ref.get()
         if doc.exists:
-            return self._to_snake(doc.to_dict(), paper_id)
+            return self._to_snake(doc.to_dict(), safe_id)
         return None
 
     async def create(self, paper_id: str, data: dict) -> dict:
         """論文を作成（存在しなければ）"""
-        doc_ref = self._get_db().collection(self.COLLECTION_PAPERS).document(paper_id)
+        safe_id = self._sanitize_id(paper_id)
+        doc_ref = self._get_db().collection(self.COLLECTION_PAPERS).document(safe_id)
         
         # 既に存在するか確認（上書きしないポリシー）
         doc = await doc_ref.get()
         if doc.exists:
-            return self._to_snake(doc.to_dict(), paper_id)
+            return self._to_snake(doc.to_dict(), safe_id)
 
         now = datetime.now(timezone.utc)
         
         # CamelCase for storage
         doc_data = {
-            "id": paper_id,
+            "id": safe_id,
             "title": data.get("title", ""),
             "authors": data.get("authors", []),
             "year": data.get("year"),
@@ -51,11 +66,12 @@ class PaperRepository:
         }
         
         await doc_ref.set(doc_data)
-        return self._to_snake(doc_data, paper_id)
+        return self._to_snake(doc_data, safe_id)
 
     async def update(self, paper_id: str, update_data: dict) -> dict | None:
         """論文のフィールドを部分更新する"""
-        doc_ref = self._get_db().collection(self.COLLECTION_PAPERS).document(paper_id)
+        safe_id = self._sanitize_id(paper_id)
+        doc_ref = self._get_db().collection(self.COLLECTION_PAPERS).document(safe_id)
         doc = await doc_ref.get()
         if not doc.exists:
             return None
@@ -64,20 +80,22 @@ class PaperRepository:
         await doc_ref.update(update_data)
         
         updated_doc = await doc_ref.get()
-        return self._to_snake(updated_doc.to_dict(), paper_id)
+        return self._to_snake(updated_doc.to_dict(), safe_id)
 
     async def add_like(self, uid: str, paper_id: str):
         """ユーザーのいいねを追加"""
+        safe_id = self._sanitize_id(paper_id)
         now = datetime.now(timezone.utc)
-        like_ref = self._get_db().collection(self.COLLECTION_USERS).document(uid).collection(self.SUB_COLLECTION_LIKES).document(paper_id)
+        like_ref = self._get_db().collection(self.COLLECTION_USERS).document(uid).collection(self.SUB_COLLECTION_LIKES).document(safe_id)
         await like_ref.set({
-            "paperId": paper_id,
+            "paperId": safe_id,
             "createdAt": now
         })
 
     async def remove_like(self, uid: str, paper_id: str):
         """ユーザーのいいねを解除"""
-        like_ref = self._get_db().collection(self.COLLECTION_USERS).document(uid).collection(self.SUB_COLLECTION_LIKES).document(paper_id)
+        safe_id = self._sanitize_id(paper_id)
+        like_ref = self._get_db().collection(self.COLLECTION_USERS).document(uid).collection(self.SUB_COLLECTION_LIKES).document(safe_id)
         await like_ref.delete()
 
     async def get_user_likes(self, uid: str) -> list[str]:
@@ -95,7 +113,7 @@ class PaperRepository:
         # Firestore in_query supports max 10, so we might need chunking if list is huge
         # For simple implementations, loop or chunking. Let's start with loop for safety or batches
         # Efficient way: getAll
-        refs = [self._get_db().collection(self.COLLECTION_PAPERS).document(pid) for pid in paper_ids]
+        refs = [self._get_db().collection(self.COLLECTION_PAPERS).document(self._sanitize_id(pid)) for pid in paper_ids]
         
         results = []
         async for doc in self._get_db().get_all(refs):

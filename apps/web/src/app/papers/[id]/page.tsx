@@ -5,8 +5,7 @@
  * データ取得・状態管理を担当し、表示はコンポーネントへ分離
  */
 
-import { use, useState, useEffect, useCallback, useRef } from "react";
-import Link from "next/link";
+import { use, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiGet } from "@/lib/api/client";
 import {
@@ -16,8 +15,8 @@ import {
     deleteMemo,
     createKeyword,
     listKeywords,
-    listPaperKeywords,
-    tagPaperKeyword,
+    getPaperKeywords,
+    tagPaperKeywords,
     untagPaperKeyword,
     MemoResponse,
     MemoRef,
@@ -41,6 +40,35 @@ export default function PaperDetailPage({
     const { id } = use(params);
 
     const searchParams = useSearchParams();
+
+    const normalizePaperId = (rawId: string): string => {
+        let next = rawId;
+        for (let i = 0; i < 3; i++) {
+            try {
+                const decoded = decodeURIComponent(next);
+                if (decoded === next) {
+                    return decoded;
+                }
+                next = decoded;
+            } catch {
+                return next;
+            }
+        }
+        return next;
+    };
+
+    const paperId = useMemo(() => normalizePaperId(id), [id]);
+
+    const getDoiUrlFromId = (rawId: string): string | null => {
+        const normalized = normalizePaperId(rawId);
+        if (!normalized.toLowerCase().startsWith("doi:")) {
+            return null;
+        }
+
+        const doi = normalized.slice(4).trim();
+        if (!doi) return null;
+        return `https://doi.org/${doi}`;
+    };
 
     const resolveTab = useCallback((): Tab => {
         const rawTab = searchParams.get("tab");
@@ -66,9 +94,9 @@ export default function PaperDetailPage({
 
     const [activeTab, setActiveTab] = useState<Tab>(resolveTab());
     const [targetPage, setTargetPage] = useState<number>(resolvePage());
-    const [relatedFocusKeyword, setRelatedFocusKeyword] = useState<string | null>(
-        null,
-    );
+    const [relatedFocusKeyword, setRelatedFocusKeyword] = useState<
+        string | null
+    >(null);
     const [relatedFocusRequestId, setRelatedFocusRequestId] = useState(0);
     const [paper, setPaper] = useState<Paper | null>(null);
     const [loading, setLoading] = useState(true);
@@ -86,11 +114,14 @@ export default function PaperDetailPage({
     );
     const [keywordsLoading, setKeywordsLoading] = useState(true);
     const [keywordsInitialFetched, setKeywordsInitialFetched] = useState(false);
+    const [keywordsAccessBlocked, setKeywordsAccessBlocked] = useState(false);
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingCountRef = useRef(0);
     const [keywordsError, setKeywordsError] = useState<string | null>(null);
-    const { statusMap: keywordRelatedStatusMap, loading: keywordRelatedStatusLoading } =
-        useKeywordRelatedStatus(id, paperKeywords, keywordsLoading);
+    const {
+        statusMap: keywordRelatedStatusMap,
+        loading: keywordRelatedStatusLoading,
+    } = useKeywordRelatedStatus(paperId, paperKeywords, keywordsLoading);
 
     useEffect(() => {
         const nextTab = resolveTab();
@@ -100,19 +131,27 @@ export default function PaperDetailPage({
         setTargetPage((prev) => (prev === nextPage ? prev : nextPage));
     }, [resolveTab, resolvePage]);
 
-    const fetchPaper = useCallback(async () => {
+    const fetchPaper = useCallback(async (): Promise<boolean> => {
         try {
             setError(null);
-            const data = await apiGet<Paper>(`/api/v1/library/${id}`);
-            setPaper(data);
-        } catch (e: unknown) {
-            setError(
-                e instanceof Error ? e.message : "論文の取得に失敗しました",
+            const data = await apiGet<Paper>(
+                `/api/v1/library/${encodeURIComponent(paperId)}`,
             );
+            setPaper(data);
+            return true;
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "論文の取得に失敗しました");
+            return false;
         } finally {
             setLoading(false);
         }
-    }, [id]);
+    }, [paperId]);
+
+    const matchesPaperId = useCallback(
+        (value: string) =>
+            value === id || value === paperId || value === normalizePaperId(id),
+        [id, paperId],
+    );
 
     const fetchMemo = useCallback(async () => {
         setMemosLoading(true);
@@ -120,7 +159,8 @@ export default function PaperDetailPage({
             const data = await getMemos();
             const related = data.memos.find((memo) =>
                 memo.refs.some(
-                    (ref) => ref.ref_type === "paper" && ref.ref_id === id,
+                    (ref) =>
+                        ref.ref_type === "paper" && matchesPaperId(ref.ref_id),
                 ),
             );
 
@@ -137,13 +177,14 @@ export default function PaperDetailPage({
         } finally {
             setMemosLoading(false);
         }
-    }, [id]);
+    }, [matchesPaperId]);
 
     const fetchPaperKeywords = useCallback(async () => {
         setKeywordsLoading(true);
         try {
             setKeywordsError(null);
-            const data = await listPaperKeywords(id);
+            setKeywordsAccessBlocked(false);
+            const data = await getPaperKeywords(paperId);
             setPaperKeywords(data.keywords);
             // キーワードが見つかった場合のみloadingをfalseに
             if (data.keywords.length > 0) {
@@ -151,33 +192,55 @@ export default function PaperDetailPage({
             }
             return data.keywords.length;
         } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : "";
+            const blocked =
+                message.includes("paper is not in your library") ||
+                message.includes("API Error: 403");
+            setKeywordsAccessBlocked(blocked);
             setKeywordsError(
                 e instanceof Error
                     ? e.message
                     : "キーワードの取得に失敗しました",
             );
             setKeywordsLoading(false);
-            return -1; // error
+            return blocked ? -2 : -1;
         }
-    }, [id]);
+    }, [paperId]);
 
     useEffect(() => {
-        fetchPaper();
-        fetchMemo();
-        fetchPaperKeywords().then((count) => {
+        let cancelled = false;
+
+        const init = async () => {
+            const paperFound = await fetchPaper();
+            if (cancelled || !paperFound) return;
+
+            await fetchMemo();
+            const count = await fetchPaperKeywords();
+            if (cancelled) return;
+
             setKeywordsInitialFetched(true);
-            if (count === 0) {
+            if (count === 0 && !keywordsAccessBlocked) {
                 // キーワードが未生成 → ポーリング開始
                 setKeywordsLoading(true);
             } else {
                 setKeywordsLoading(false);
             }
-        });
-    }, [fetchPaper, fetchMemo, fetchPaperKeywords]);
+        };
+
+        init();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [fetchPaper, fetchMemo, fetchPaperKeywords, keywordsAccessBlocked]);
 
     // キーワードが0件の場合、ポーリングで生成完了を待つ
     useEffect(() => {
         if (!keywordsInitialFetched) return;
+        if (keywordsAccessBlocked) {
+            setKeywordsLoading(false);
+            return;
+        }
         if (paperKeywords.length > 0) {
             // 既にキーワードがある → ポーリング不要
             if (pollingRef.current) {
@@ -193,7 +256,11 @@ export default function PaperDetailPage({
         pollingRef.current = setInterval(async () => {
             pollingCountRef.current++;
             const count = await fetchPaperKeywords();
-            if ((count && count > 0) || pollingCountRef.current >= 10) {
+            if (
+                count < 0 ||
+                (count && count > 0) ||
+                pollingCountRef.current >= 10
+            ) {
                 if (pollingRef.current) {
                     clearInterval(pollingRef.current);
                     pollingRef.current = null;
@@ -208,7 +275,12 @@ export default function PaperDetailPage({
                 pollingRef.current = null;
             }
         };
-    }, [keywordsInitialFetched, paperKeywords.length, fetchPaperKeywords]);
+    }, [
+        keywordsInitialFetched,
+        paperKeywords.length,
+        keywordsAccessBlocked,
+        fetchPaperKeywords,
+    ]);
 
     useEffect(() => {
         if (paper && !paperMemo && !memoTitle) {
@@ -225,11 +297,13 @@ export default function PaperDetailPage({
                 await updateMemo(paperMemo.id, {
                     title: memoTitle.trim(),
                     body: memoBody.trim(),
-                    tags: Array.from(new Set([...(paperMemo.tags || []), originTag])),
+                    tags: Array.from(
+                        new Set([...(paperMemo.tags || []), originTag]),
+                    ),
                 });
             } else {
                 const refs: MemoRef[] = [
-                    { ref_type: "paper", ref_id: id, note: null },
+                    { ref_type: "paper", ref_id: paperId, note: null },
                 ];
                 await createMemo({
                     title: memoTitle.trim(),
@@ -284,7 +358,7 @@ export default function PaperDetailPage({
 
         try {
             const keywordId = await resolveKeywordIdByLabel(normalized);
-            await tagPaperKeyword(id, {
+            await tagPaperKeywords(paperId, {
                 keyword_id: keywordId,
                 reason: reason || "llm_paper_keyword",
             });
@@ -299,7 +373,7 @@ export default function PaperDetailPage({
 
     const handleDeleteKeyword = async (keywordId: string) => {
         try {
-            await untagPaperKeyword(id, keywordId);
+            await untagPaperKeyword(paperId, keywordId);
             await fetchPaperKeywords();
         } catch (e: unknown) {
             alert(
@@ -329,17 +403,26 @@ export default function PaperDetailPage({
     }
 
     if (error || !paper) {
+        const doiUrl = getDoiUrlFromId(paperId);
+
         return (
             <div className="space-y-6">
                 <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-center">
                     <p className="text-red-400">
                         {error || "論文が見つかりません"}
                     </p>
-                    <Link
-                        href="/library"
-                        className="mt-2 inline-block text-sm text-primary hover:underline">
-                        ← ライブラリに戻る
-                    </Link>
+                    {doiUrl && (
+                        <p className="mt-2">
+                            <a
+                                href={doiUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sm text-primary underline hover:no-underline">
+                                {doiUrl}
+                            </a>
+                        </p>
+                    )}
+                    <PaperBackLink />
                 </div>
             </div>
         );
@@ -401,7 +484,7 @@ export default function PaperDetailPage({
 
             {activeTab === "related" && (
                 <RelatedPanel
-                    paperId={id}
+                    paperId={paperId}
                     focusKeyword={relatedFocusKeyword}
                     focusRequestId={relatedFocusRequestId}
                 />

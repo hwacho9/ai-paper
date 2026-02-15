@@ -1,6 +1,24 @@
 import Link from "next/link";
 import { KeywordRelatedGroup } from "@/lib/api/related";
 
+function normalizePaperId(rawId: string): string {
+    let next = rawId;
+    for (let i = 0; i < 3; i += 1) {
+        try {
+            const decoded = decodeURIComponent(next);
+            if (decoded === next) return decoded;
+            next = decoded;
+        } catch {
+            return next;
+        }
+    }
+    return next;
+}
+
+function getPaperDetailPath(paperId: string): string {
+    return `/papers/${encodeURIComponent(normalizePaperId(paperId))}`;
+}
+
 interface KeywordRelatedGroupListProps {
     groups: KeywordRelatedGroup[];
     noHitKeywords?: string[];
@@ -27,7 +45,7 @@ export function KeywordRelatedGroupList({
                     {group.items.map((paper) => (
                         <Link
                             key={`${group.keyword}-${paper.paper_id}`}
-                            href={`/papers/${paper.paper_id}`}
+                            href={getPaperDetailPath(paper.paper_id)}
                             className="block glass-card rounded-xl p-4 transition-all hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
                             <div className="min-w-0 flex-1 space-y-1">
                                 <h4 className="font-medium leading-tight group-hover:text-primary transition-colors">

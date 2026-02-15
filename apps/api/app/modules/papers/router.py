@@ -2,12 +2,37 @@
 D-03: ペーパーライブラリ - ルーター
 """
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile
+from urllib.parse import quote, unquote
 
 from app.core.firebase_auth import get_current_user
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
 from app.modules.papers.service import paper_service
 
 router = APIRouter()
+
+
+def _paper_id_variants(paper_id: str) -> list[str]:
+    """Return paper id variants considering URL encoding/decoding."""
+    variants: list[str] = []
+    current = paper_id
+
+    for _ in range(3):
+        if current not in variants:
+            variants.append(current)
+
+        quoted = quote(current, safe=":")
+        if quoted not in variants:
+            variants.append(quoted)
+
+        try:
+            next_value = unquote(current)
+        except Exception:
+            break
+        if next_value == current:
+            break
+        current = next_value
+
+    return variants
 
 @router.get("", response_model=PaperListResponse)
 async def get_library(
@@ -18,7 +43,7 @@ async def get_library(
     """
     return await paper_service.get_user_library(current_user["uid"])
 
-@router.post("/{paper_id}/like", response_model=bool)
+@router.post("/{paper_id:path}/like", response_model=bool)
 async def toggle_like(
     paper_id: str,
     paper_data: PaperCreate,
@@ -31,12 +56,18 @@ async def toggle_like(
     Returns:
         bool: 現在のいいね状態 (True: 保存済み, False: 解除済み)
     """
-    if paper_id != paper_data.external_id:
+    path_variants = _paper_id_variants(paper_id)
+    body_variants = set(_paper_id_variants(paper_data.external_id))
+    normalized = next((item for item in path_variants if item in body_variants), None)
+    if not normalized:
         raise HTTPException(status_code=400, detail="ID mismatch")
+
+    if paper_data.external_id != normalized:
+        paper_data.external_id = normalized
         
     return await paper_service.toggle_like(current_user["uid"], paper_data)
 
-@router.get("/{paper_id}", response_model=PaperResponse)
+@router.get("/{paper_id:path}", response_model=PaperResponse)
 async def get_paper(
     paper_id: str,
     current_user: dict = Depends(get_current_user),
@@ -49,7 +80,7 @@ async def get_paper(
         raise HTTPException(status_code=404, detail="Paper not found")
     return paper
 
-@router.post("/{paper_id}/ingest", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{paper_id:path}/ingest", status_code=status.HTTP_202_ACCEPTED)
 async def ingest_paper(
     paper_id: str,
     current_user: dict = Depends(get_current_user),
@@ -63,7 +94,7 @@ async def ingest_paper(
         raise HTTPException(status_code=404, detail="Paper not found")
     return {"status": "accepted", "message": "Ingestion started"}
 
-@router.post("/{paper_id}/upload", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{paper_id:path}/upload", status_code=status.HTTP_202_ACCEPTED)
 async def upload_paper_pdf(
     paper_id: str,
     file: UploadFile,

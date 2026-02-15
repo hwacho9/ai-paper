@@ -1,6 +1,7 @@
 """D-06: キーワード - サービス"""
 
 import logging
+from urllib.parse import unquote
 
 from fastapi import HTTPException
 
@@ -143,7 +144,19 @@ class KeywordService:
             raise HTTPException(status_code=404, detail="paper not found")
 
         liked_ids = await self.paper_repository.get_user_likes(owner_uid)
-        if paper_id not in liked_ids:
+        normalized_candidates: set[str] = set()
+        current = paper_id
+        for _ in range(3):
+            normalized_candidates.add(self.paper_repository._sanitize_id(current))
+            try:
+                next_value = unquote(current)
+            except Exception:
+                break
+            if next_value == current:
+                break
+            current = next_value
+
+        if not (normalized_candidates & set(liked_ids)):
             raise HTTPException(status_code=403, detail="paper is not in your library")
 
     async def suggest(self, paper_id: str) -> list[dict]:

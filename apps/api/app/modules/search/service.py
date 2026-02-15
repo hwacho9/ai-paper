@@ -14,6 +14,7 @@ from fastapi import HTTPException
 import logging
 import asyncio
 import re
+from urllib.parse import quote
 
 from app.core.search import ArxivClient, PubmedClient, ScholarClient, SearchResult
 import uuid
@@ -282,10 +283,13 @@ class SearchService:
         paper_id = None
         
         # 1. Try to use external ID as ID
+        # Note: Firestore IDs cannot contain '/', so we quote them.
         if result.external_ids.get("ArXiv"):
-            paper_id = result.external_ids["ArXiv"]
+            # ArXiv ID might contain slashes (old format), though rare in new ones.
+            # safe="" ensures '/' is encoded.
+            paper_id = quote(result.external_ids["ArXiv"], safe="")
         elif result.external_ids.get("DOI"):
-            paper_id = f"doi:{result.external_ids['DOI']}"
+            paper_id = f"doi:{quote(result.external_ids['DOI'], safe='')}"
         elif result.external_ids.get("PubMed"):
             paper_id = f"pubmed:{result.external_ids['PubMed']}"
             
