@@ -6,7 +6,7 @@ from app.modules.related.service import related_service
 
 router = APIRouter()
 
-@router.get("/papers/{paper_id}/related", response_model=List[RelatedPaper])
+@router.get("/papers/{paper_id:path}/related", response_model=List[RelatedPaper])
 async def get_related_papers(
     paper_id: str,
     limit: int = 5,

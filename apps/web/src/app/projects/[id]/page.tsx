@@ -106,6 +106,24 @@ function makeCiteKey(paperId: string): string {
     return key || "paper";
 }
 
+function normalizePaperId(rawId: string): string {
+    let next = rawId;
+    for (let i = 0; i < 3; i += 1) {
+        try {
+            const decoded = decodeURIComponent(next);
+            if (decoded === next) return decoded;
+            next = decoded;
+        } catch {
+            return next;
+        }
+    }
+    return next;
+}
+
+function getPaperDetailPath(paperId: string): string {
+    return `/papers/${encodeURIComponent(normalizePaperId(paperId))}`;
+}
+
 interface TextRange {
     start: number;
     end: number;
@@ -143,9 +161,9 @@ export default function ProjectDetailPage({
     const [texLoading, setTexLoading] = useState(false);
     const [texSaving, setTexSaving] = useState(false);
     const [isCompiling, setIsCompiling] = useState(false);
-    const [leftPanelMode, setLeftPanelMode] = useState<"files" | "search" | null>(
-        null,
-    );
+    const [leftPanelMode, setLeftPanelMode] = useState<
+        "files" | "search" | null
+    >(null);
     const [compileLog, setCompileLog] = useState<string | null>(null);
     const [logExpanded, setLogExpanded] = useState(false);
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
@@ -188,7 +206,7 @@ export default function ProjectDetailPage({
                 papersData.map(async (paper) => {
                     try {
                         const detail = await apiGet<PaperDetail>(
-                            `/api/v1/library/${paper.paper_id}`,
+                            `/api/v1/library/${encodeURIComponent(paper.paper_id)}`,
                         );
                         details.set(paper.paper_id, detail);
                     } catch (e) {
@@ -223,7 +241,8 @@ export default function ProjectDetailPage({
             const filtered = data.memos
                 .filter((memo) =>
                     memo.refs.some(
-                        (ref) => ref.ref_type === "project" && ref.ref_id === id,
+                        (ref) =>
+                            ref.ref_type === "project" && ref.ref_id === id,
                     ),
                 )
                 .sort((a, b) => {
@@ -264,10 +283,13 @@ export default function ProjectDetailPage({
         fetchProjectMemos();
     }, [fetchProjectMemos]);
 
-    const formatProjectMemoTitle = useCallback((memoNumber: number) => {
-        const projectTitle = project?.title || "Untitled Project";
-        return `Project: ${projectTitle}のメモ #${memoNumber}`;
-    }, [project?.title]);
+    const formatProjectMemoTitle = useCallback(
+        (memoNumber: number) => {
+            const projectTitle = project?.title || "Untitled Project";
+            return `Project: ${projectTitle}のメモ #${memoNumber}`;
+        },
+        [project?.title],
+    );
 
     const createDefaultProjectMemoTitle = useCallback(() => {
         return formatProjectMemoTitle(nextProjectMemoNumber);
@@ -284,12 +306,7 @@ export default function ProjectDetailPage({
         if (editingMemoId) return;
         if (memoTitle.trim()) return;
         setMemoTitle(createDefaultProjectMemoTitle());
-    }, [
-        activeTab,
-        editingMemoId,
-        memoTitle,
-        createDefaultProjectMemoTitle,
-    ]);
+    }, [activeTab, editingMemoId, memoTitle, createDefaultProjectMemoTitle]);
 
     const openMemoEditor = (memo: MemoResponse) => {
         setEditingMemoId(memo.id);
@@ -304,7 +321,9 @@ export default function ProjectDetailPage({
         setMemoSaving(true);
         try {
             if (editingMemoId) {
-                const current = projectMemos.find((m) => m.id === editingMemoId);
+                const current = projectMemos.find(
+                    (m) => m.id === editingMemoId,
+                );
                 await updateMemo(editingMemoId, {
                     title,
                     body,
@@ -339,7 +358,9 @@ export default function ProjectDetailPage({
         if (!confirm("このメモを削除しますか？")) return;
         try {
             await deleteMemo(memoId);
-            setProjectMemos((prev) => prev.filter((memo) => memo.id !== memoId));
+            setProjectMemos((prev) =>
+                prev.filter((memo) => memo.id !== memoId),
+            );
             if (editingMemoId === memoId) {
                 resetMemoEditor();
             }
@@ -734,7 +755,11 @@ export default function ProjectDetailPage({
                     content = loaded;
                 }
             }
-            const range = findPaperRangeInText(content, meta.title, meta.citeKey);
+            const range = findPaperRangeInText(
+                content,
+                meta.title,
+                meta.citeKey,
+            );
             if (!range) {
                 alert("main.tex に該当箇所が見つかりませんでした。");
                 return;
@@ -910,7 +935,8 @@ export default function ProjectDetailPage({
 
     const docSearchMatches = useMemo(() => {
         const q = docSearchQuery.trim();
-        if (!q) return [] as Array<{ start: number; end: number; preview: string }>;
+        if (!q)
+            return [] as Array<{ start: number; end: number; preview: string }>;
         const regex = new RegExp(escapeRegExp(q), "gi");
         const hits: Array<{ start: number; end: number; preview: string }> = [];
         for (const match of latexContent.matchAll(regex)) {
@@ -922,7 +948,9 @@ export default function ProjectDetailPage({
             hits.push({
                 start,
                 end,
-                preview: latexContent.slice(previewStart, previewEnd).replace(/\n/g, " "),
+                preview: latexContent
+                    .slice(previewStart, previewEnd)
+                    .replace(/\n/g, " "),
             });
             if (hits.length >= 50) break;
         }
@@ -1015,14 +1043,19 @@ export default function ProjectDetailPage({
 
     const tabs = [
         { key: "latex" as Tab, label: "LaTeX", count: linkedPaperIds.size },
-        { key: "literature" as Tab, label: "プロジェクト内の文献", count: papers.length },
+        {
+            key: "literature" as Tab,
+            label: "プロジェクト内の文献",
+            count: papers.length,
+        },
         { key: "memos" as Tab, label: "メモ", count: projectMemos.length },
     ];
     const filteredProjectMemos = projectMemos.filter((memo) => {
         if (!memoSearchQuery.trim()) return true;
         const q = memoSearchQuery.toLowerCase();
         return (
-            memo.title.toLowerCase().includes(q) || memo.body.toLowerCase().includes(q)
+            memo.title.toLowerCase().includes(q) ||
+            memo.body.toLowerCase().includes(q)
         );
     });
 
@@ -1236,7 +1269,9 @@ export default function ProjectDetailPage({
                             </div>
                             <input
                                 value={docSearchQuery}
-                                onChange={(e) => setDocSearchQuery(e.target.value)}
+                                onChange={(e) =>
+                                    setDocSearchQuery(e.target.value)
+                                }
                                 placeholder="main.tex 内を検索..."
                                 className="mb-3 w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus:border-primary"
                             />
@@ -1255,7 +1290,9 @@ export default function ProjectDetailPage({
                                 {docSearchMatches.map((m, idx) => (
                                     <button
                                         key={`${m.start}-${idx}`}
-                                        onClick={() => focusEditorRange(m.start, m.end)}
+                                        onClick={() =>
+                                            focusEditorRange(m.start, m.end)
+                                        }
                                         className="w-full rounded-md border border-border bg-muted/10 px-2 py-1.5 text-left text-[11px] text-muted-foreground hover:border-primary/40 hover:text-foreground">
                                         {m.preview}
                                     </button>
@@ -1410,7 +1447,8 @@ export default function ProjectDetailPage({
                                 </h4>
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs text-muted-foreground">
-                                        Linked {linkedPaperIds.size}/{papers.length}
+                                        Linked {linkedPaperIds.size}/
+                                        {papers.length}
                                     </span>
                                     <button
                                         onClick={openAddDialog}
@@ -1438,7 +1476,9 @@ export default function ProjectDetailPage({
                                             <div className="flex items-center justify-between gap-2">
                                                 <button
                                                     onClick={() =>
-                                                        void jumpToPaperInMainTex(meta)
+                                                        void jumpToPaperInMainTex(
+                                                            meta,
+                                                        )
                                                     }
                                                     className="truncate text-left hover:text-primary"
                                                     title="main.tex の該当箇所へジャンプ">
@@ -1446,7 +1486,9 @@ export default function ProjectDetailPage({
                                                 </button>
                                                 <div className="flex items-center gap-1">
                                                     <Link
-                                                        href={`/papers/${meta.paperId}`}
+                                                        href={getPaperDetailPath(
+                                                            meta.paperId,
+                                                        )}
                                                         className="rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
                                                         paper
                                                     </Link>
@@ -1537,7 +1579,9 @@ export default function ProjectDetailPage({
 
                     <div className="glass-card rounded-xl p-4">
                         <div className="mb-3 flex items-center justify-between">
-                            <h4 className="font-semibold">プロジェクト内の文献</h4>
+                            <h4 className="font-semibold">
+                                プロジェクト内の文献
+                            </h4>
                             <button
                                 onClick={openAddDialog}
                                 className="rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:border-primary/50 hover:text-primary transition-all">
@@ -1545,40 +1589,10 @@ export default function ProjectDetailPage({
                             </button>
                         </div>
                         <div className="space-y-2">
-                        {paperMeta.length === 0 && (
-                            <div className="text-center py-12 text-muted-foreground">
-                                <div className="text-4xl mb-3">📚</div>
-                                <p>プロジェクト内の文献はまだありません</p>
-                                <button
-                                    onClick={openAddDialog}
-                                    className="mt-4 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs text-primary hover:bg-primary hover:text-primary-foreground transition-colors">
-                                    文献を追加
-                                </button>
-                            </div>
-                        )}
-                        {paperMeta.map((meta) => {
-                            const detail = paperDetails.get(meta.paperId);
-                            return (
-                                <div
-                                    key={meta.paperId}
-                                    className="glass-card group flex items-center gap-3 rounded-xl p-3 transition-all hover:border-primary/40">
-                                    <Link
-                                        href={`/papers/${meta.paperId}`}
-                                        className="flex min-w-0 flex-1 items-center gap-3">
-                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                                            {detail?.year?.toString().slice(-2) ||
-                                                "??"}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium">
-                                                {meta.title}
-                                            </p>
-                                            <p className="truncate text-xs text-muted-foreground">
-                                                {detail?.authors.join(", ") ||
-                                                    "Author不明"}
-                                            </p>
-                                        </div>
-                                    </Link>
+                            {paperMeta.length === 0 && (
+                                <div className="text-center py-12 text-muted-foreground">
+                                    <div className="text-4xl mb-3">📚</div>
+                                    <p>プロジェクト内の文献はまだありません</p>
                                     <button
                                         onClick={() =>
                                             void handleRemovePaper(meta.paperId)
@@ -1590,8 +1604,49 @@ export default function ProjectDetailPage({
                                             : "削除"}
                                     </button>
                                 </div>
-                            );
-                        })}
+                            )}
+                            {paperMeta.map((meta) => {
+                                const detail = paperDetails.get(meta.paperId);
+                                return (
+                                    <div
+                                        key={meta.paperId}
+                                        className="glass-card group flex items-center gap-3 rounded-xl p-3 transition-all hover:border-primary/40">
+                                        <Link
+                                            href={getPaperDetailPath(meta.paperId)}
+                                            className="flex min-w-0 flex-1 items-center gap-3">
+                                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
+                                                {detail?.year
+                                                    ?.toString()
+                                                    .slice(-2) || "??"}
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-medium">
+                                                    {meta.title}
+                                                </p>
+                                                <p className="truncate text-xs text-muted-foreground">
+                                                    {detail?.authors.join(
+                                                        ", ",
+                                                    ) || "Author不明"}
+                                                </p>
+                                            </div>
+                                        </Link>
+                                        <button
+                                            onClick={() =>
+                                                void handleRemovePaper(
+                                                    meta.paperId,
+                                                )
+                                            }
+                                            disabled={
+                                                removingPaperId === meta.paperId
+                                            }
+                                            className="rounded-md border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs text-red-300 hover:bg-red-500/20 disabled:opacity-60">
+                                            {removingPaperId === meta.paperId
+                                                ? "削除中..."
+                                                : "削除"}
+                                        </button>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -1624,7 +1679,9 @@ export default function ProjectDetailPage({
                             </svg>
                             <input
                                 value={memoSearchQuery}
-                                onChange={(e) => setMemoSearchQuery(e.target.value)}
+                                onChange={(e) =>
+                                    setMemoSearchQuery(e.target.value)
+                                }
                                 placeholder="メモを検索..."
                                 className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:border-primary/40"
                             />
@@ -1635,14 +1692,16 @@ export default function ProjectDetailPage({
                                     読み込み中...
                                 </p>
                             )}
-                            {!memosLoading && filteredProjectMemos.length === 0 && (
-                                <p className="py-6 text-center text-sm text-muted-foreground">
-                                    プロジェクトメモはまだありません
-                                </p>
-                            )}
+                            {!memosLoading &&
+                                filteredProjectMemos.length === 0 && (
+                                    <p className="py-6 text-center text-sm text-muted-foreground">
+                                        プロジェクトメモはまだありません
+                                    </p>
+                                )}
                             {!memosLoading &&
                                 filteredProjectMemos.map((memo) => {
-                                    const updatedAt = memo.updated_at || memo.created_at;
+                                    const updatedAt =
+                                        memo.updated_at || memo.created_at;
                                     return (
                                         <button
                                             key={memo.id}
@@ -1660,7 +1719,9 @@ export default function ProjectDetailPage({
                                             </p>
                                             <p className="mt-2 text-[11px] text-muted-foreground">
                                                 {updatedAt
-                                                    ? new Date(updatedAt).toLocaleString("ja-JP")
+                                                    ? new Date(
+                                                          updatedAt,
+                                                      ).toLocaleString("ja-JP")
                                                     : ""}
                                             </p>
                                         </button>

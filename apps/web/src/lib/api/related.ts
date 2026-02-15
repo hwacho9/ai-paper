@@ -1,5 +1,24 @@
 import { apiGet } from "./client";
 
+const normalizePaperId = (rawId: string): string => {
+    let next = rawId;
+    for (let i = 0; i < 3; i++) {
+        try {
+            const decoded = decodeURIComponent(next);
+            if (decoded === next) {
+                return decoded;
+            }
+            next = decoded;
+        } catch {
+            return next;
+        }
+    }
+    return next;
+};
+
+const encodePaperId = (paperId: string): string =>
+    encodeURIComponent(normalizePaperId(paperId));
+
 export interface RelatedPaper {
     paperId: string;
     title: string;
@@ -65,7 +84,7 @@ export const relatedApi = {
         limit: number = 5,
     ): Promise<RelatedPaper[]> => {
         return apiGet<RelatedPaper[]>(
-            `/api/v1/papers/${paperId}/related?limit=${limit}`,
+            `/api/v1/papers/${encodePaperId(paperId)}/related?limit=${limit}`,
         );
     },
 
@@ -88,7 +107,7 @@ export const relatedApi = {
         maxKeywords: number = 8,
     ): Promise<LibraryRelatedByKeywordResponse> => {
         return apiGet<LibraryRelatedByKeywordResponse>(
-            `/api/v1/papers/${paperId}/library-related-by-keywords?per_keyword_limit=${perKeywordLimit}&max_keywords=${maxKeywords}`,
+            `/api/v1/papers/${encodePaperId(paperId)}/library-related-by-keywords?per_keyword_limit=${perKeywordLimit}&max_keywords=${maxKeywords}`,
         );
     },
 };

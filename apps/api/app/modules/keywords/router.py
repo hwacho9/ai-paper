@@ -55,7 +55,7 @@ async def delete_keyword(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/papers/{paper_id}/keywords")
+@router.post("/papers/{paper_id:path}/keywords")
 async def tag_paper(
     paper_id: str,
     body: PaperKeywordTagCreate,
@@ -65,7 +65,7 @@ async def tag_paper(
     return await keyword_service.tag_paper(paper_id, current_user["uid"], body)
 
 
-@router.get("/papers/{paper_id}/keywords", response_model=PaperKeywordListResponse)
+@router.get("/papers/{paper_id:path}/keywords", response_model=PaperKeywordListResponse)
 async def list_paper_keywords(
     paper_id: str,
     current_user: dict = Depends(get_current_user),
@@ -74,7 +74,7 @@ async def list_paper_keywords(
     return await keyword_service.list_paper_keywords(paper_id, current_user["uid"])
 
 
-@router.delete("/papers/{paper_id}/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/papers/{paper_id:path}/keywords/{keyword_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def untag_paper(
     paper_id: str,
     keyword_id: str,
@@ -85,7 +85,7 @@ async def untag_paper(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/papers/{paper_id}/keywords/suggest", response_model=KeywordSuggestionResponse)
+@router.post("/papers/{paper_id:path}/keywords/suggest", response_model=KeywordSuggestionResponse)
 async def suggest_keywords(paper_id: str, current_user: dict = Depends(get_current_user)):
     """自動キーワード推薦"""
     return await keyword_service.suggest_and_apply(paper_id, current_user["uid"])

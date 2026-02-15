@@ -319,13 +319,13 @@ export default function GraphPage() {
                 ctx.lineTo(target.x, target.y);
                 ctx.strokeStyle = isHighlighted
                     ? `rgba(180, 150, 255, ${Math.max(
-                        0.5,
-                        Math.min(0.9, 0.45 + lineWeight * 0.5),
-                    )})`
+                          0.5,
+                          Math.min(0.9, 0.45 + lineWeight * 0.5),
+                      )})`
                     : `rgba(120, 130, 190, ${Math.max(
-                        0.28,
-                        Math.min(0.75, 0.25 + lineWeight * 0.35),
-                    )})`;
+                          0.28,
+                          Math.min(0.75, 0.25 + lineWeight * 0.35),
+                      )})`;
                 ctx.lineWidth = isHighlighted ? 2.4 : 1.6 + lineWeight * 0.8;
                 ctx.shadowColor = isHighlighted
                     ? "rgba(178, 136, 255, 0.5)"
@@ -529,10 +529,16 @@ export default function GraphPage() {
         (paperId: string): string[] => {
             const projectIds = new Set<string>();
             for (const edge of edges) {
-                if (edge.source === paperId && projectNodeIdSet.has(edge.target)) {
+                if (
+                    edge.source === paperId &&
+                    projectNodeIdSet.has(edge.target)
+                ) {
                     projectIds.add(edge.target);
                 }
-                if (edge.target === paperId && projectNodeIdSet.has(edge.source)) {
+                if (
+                    edge.target === paperId &&
+                    projectNodeIdSet.has(edge.source)
+                ) {
                     projectIds.add(edge.source);
                 }
             }
@@ -564,7 +570,8 @@ export default function GraphPage() {
             return;
         }
 
-        if (selectedProjectId && projectNodeIdSet.has(selectedProjectId)) return;
+        if (selectedProjectId && projectNodeIdSet.has(selectedProjectId))
+            return;
         setSelectedProjectId(projectNodes[0]?.id || "");
     }, [
         selectedNode,
@@ -581,7 +588,7 @@ export default function GraphPage() {
         const fetchPaperTitle = async () => {
             try {
                 const detail = await apiGet<PaperTitleResponse>(
-                    `/api/v1/library/${selectedNode.id}`,
+                    `/api/v1/library/${encodeURIComponent(selectedNode.id)}`,
                 );
                 if (!detail?.title) return;
                 setPaperTitleMap((prev) => ({
@@ -597,7 +604,11 @@ export default function GraphPage() {
 
     const handleAddPaperToProject = async (projectId?: string) => {
         const targetProjectId = projectId || selectedProjectId;
-        if (!selectedNode || selectedNode.type === "project" || !targetProjectId) {
+        if (
+            !selectedNode ||
+            selectedNode.type === "project" ||
+            !targetProjectId
+        ) {
             return;
         }
         setProjectActionLoading({ type: "add", projectId: targetProjectId });
@@ -617,7 +628,11 @@ export default function GraphPage() {
             if (!hasEdge) {
                 const nextEdges = [
                     ...edges,
-                    { source: targetProjectId, target: selectedNode.id, strength: 1 },
+                    {
+                        source: targetProjectId,
+                        target: selectedNode.id,
+                        strength: 1,
+                    },
                 ];
                 setEdges(nextEdges);
                 edgesRef.current = nextEdges;
@@ -625,7 +640,9 @@ export default function GraphPage() {
 
             setNodes((prev) =>
                 prev.map((node) =>
-                    node.id === selectedNode.id ? { ...node, type: "related" } : node,
+                    node.id === selectedNode.id
+                        ? { ...node, type: "related" }
+                        : node,
                 ),
             );
             setSelectedNode((prev) =>
@@ -634,7 +651,11 @@ export default function GraphPage() {
                     : prev,
             );
         } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : "プロジェクトへの追加に失敗しました");
+            alert(
+                e instanceof Error
+                    ? e.message
+                    : "プロジェクトへの追加に失敗しました",
+            );
         } finally {
             setProjectActionLoading(null);
         }
@@ -642,14 +663,21 @@ export default function GraphPage() {
 
     const handleRemovePaperFromProject = async (projectId?: string) => {
         const targetProjectId = projectId || selectedProjectId;
-        if (!selectedNode || selectedNode.type === "project" || !targetProjectId) {
+        if (
+            !selectedNode ||
+            selectedNode.type === "project" ||
+            !targetProjectId
+        ) {
             return;
         }
-        if (!confirm("この論文を選択中のプロジェクトから削除しますか？")) return;
+        if (!confirm("この論文を選択中のプロジェクトから削除しますか？"))
+            return;
 
         setProjectActionLoading({ type: "remove", projectId: targetProjectId });
         try {
-            await apiDelete(`/api/v1/projects/${targetProjectId}/papers/${selectedNode.id}`);
+            await apiDelete(
+                `/api/v1/projects/${targetProjectId}/papers/${selectedNode.id}`,
+            );
             setSelectedProjectId(targetProjectId);
 
             const nextEdges = edges.filter(
@@ -671,18 +699,28 @@ export default function GraphPage() {
                     (edge.target === selectedNode.id &&
                         projectNodeIdSet.has(edge.source)),
             );
-            const nextType: GraphNode["type"] = isStillInProject ? "related" : "owned";
+            const nextType: GraphNode["type"] = isStillInProject
+                ? "related"
+                : "owned";
 
             setNodes((prev) =>
                 prev.map((node) =>
-                    node.id === selectedNode.id ? { ...node, type: nextType } : node,
+                    node.id === selectedNode.id
+                        ? { ...node, type: nextType }
+                        : node,
                 ),
             );
             setSelectedNode((prev) =>
-                prev && prev.id === selectedNode.id ? { ...prev, type: nextType } : prev,
+                prev && prev.id === selectedNode.id
+                    ? { ...prev, type: nextType }
+                    : prev,
             );
         } catch (e: unknown) {
-            alert(e instanceof Error ? e.message : "プロジェクトからの削除に失敗しました");
+            alert(
+                e instanceof Error
+                    ? e.message
+                    : "プロジェクトからの削除に失敗しました",
+            );
         } finally {
             setProjectActionLoading(null);
         }
@@ -791,7 +829,8 @@ export default function GraphPage() {
                                                             project.id,
                                                         );
                                                     const isFocused =
-                                                        selectedProjectId === project.id;
+                                                        selectedProjectId ===
+                                                        project.id;
                                                     return (
                                                         <div
                                                             key={project.id}
@@ -808,7 +847,9 @@ export default function GraphPage() {
                                                                 }
                                                                 className="min-w-0 flex-1 text-left">
                                                                 <p className="truncate text-[11px] font-medium">
-                                                                    {project.label}
+                                                                    {
+                                                                        project.label
+                                                                    }
                                                                 </p>
                                                             </button>
                                                             {isLinked ? (
@@ -863,7 +904,9 @@ export default function GraphPage() {
                                 </div>
                                 <button
                                     onClick={() =>
-                                        router.push(`/papers/${selectedNode.id}`)
+                                        router.push(
+                                            `/papers/${selectedNode.id}`,
+                                        )
                                     }
                                     className="w-full rounded-lg bg-primary/20 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/30 transition-colors">
                                     詳細を表示 →

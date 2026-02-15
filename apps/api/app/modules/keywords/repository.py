@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from google.cloud.firestore import AsyncClient
+from urllib.parse import quote
 
 from app.core.firestore import get_firestore_client
 
@@ -13,6 +14,15 @@ class KeywordRepository:
 
     def _get_db(self) -> AsyncClient:
         return get_firestore_client()
+
+    def _sanitize_paper_id(self, paper_id: str) -> str:
+        """
+        Sanitize paper_id for Firestore document IDs in subcollections.
+        Firestore document IDs cannot contain '/'.
+        """
+        if "/" in paper_id:
+            return quote(paper_id, safe=":")
+        return paper_id
 
     async def create(self, owner_uid: str, data: dict) -> dict:
         """キーワード作成"""
@@ -107,9 +117,10 @@ class KeywordRepository:
         reason: str = "",
     ) -> dict:
         """論文にキーワードを付与（同一keyword_idは上書き）"""
+        safe_paper_id = self._sanitize_paper_id(paper_id)
         now = datetime.now(timezone.utc)
         doc_data = {
-            "paperId": paper_id,
+            "paperId": safe_paper_id,
             "keywordId": keyword_id,
             "confidence": confidence,
             "source": source,
@@ -120,7 +131,7 @@ class KeywordRepository:
         doc_ref = (
             self._get_db()
             .collection(self.PAPERS_COLLECTION)
-            .document(paper_id)
+            .document(safe_paper_id)
             .collection(self.PAPER_KEYWORDS_SUBCOLLECTION)
             .document(keyword_id)
         )
@@ -129,10 +140,11 @@ class KeywordRepository:
 
     async def untag_paper_keyword(self, paper_id: str, keyword_id: str) -> bool:
         """論文からキーワードを解除"""
+        safe_paper_id = self._sanitize_paper_id(paper_id)
         doc_ref = (
             self._get_db()
             .collection(self.PAPERS_COLLECTION)
-            .document(paper_id)
+            .document(safe_paper_id)
             .collection(self.PAPER_KEYWORDS_SUBCOLLECTION)
             .document(keyword_id)
         )
@@ -144,10 +156,11 @@ class KeywordRepository:
 
     async def delete_paper_keywords_by_source(self, paper_id: str, source: str) -> int:
         """論文のキーワードをsourceで一括削除"""
+        safe_paper_id = self._sanitize_paper_id(paper_id)
         keywords_ref = (
             self._get_db()
             .collection(self.PAPERS_COLLECTION)
-            .document(paper_id)
+            .document(safe_paper_id)
             .collection(self.PAPER_KEYWORDS_SUBCOLLECTION)
         )
         query = keywords_ref.where("source", "==", source)
@@ -159,10 +172,11 @@ class KeywordRepository:
 
     async def list_paper_keywords(self, paper_id: str, owner_uid: str) -> list[dict]:
         """論文に紐づくキーワード一覧を取得"""
+        safe_paper_id = self._sanitize_paper_id(paper_id)
         keywords_ref = (
             self._get_db()
             .collection(self.PAPERS_COLLECTION)
-            .document(paper_id)
+            .document(safe_paper_id)
             .collection(self.PAPER_KEYWORDS_SUBCOLLECTION)
         )
 

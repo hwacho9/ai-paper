@@ -22,7 +22,7 @@ from app.modules.reading.service import reading_service
 router = APIRouter()
 
 
-@router.get("/papers/{paper_id}/outline", response_model=list[PaperOutlineItem])
+@router.get("/papers/{paper_id:path}/outline", response_model=list[PaperOutlineItem])
 async def get_outline(
     paper_id: str,
     current_user: dict = Depends(get_current_user),
@@ -31,7 +31,7 @@ async def get_outline(
     return await reading_service.get_outline(paper_id, current_user["uid"])
 
 
-@router.get("/papers/{paper_id}/chunks", response_model=list[PaperChunk])
+@router.get("/papers/{paper_id:path}/chunks", response_model=list[PaperChunk])
 async def get_chunks(
     paper_id: str,
     section: str | None = None,
@@ -41,7 +41,7 @@ async def get_chunks(
     return await reading_service.get_chunks(paper_id, current_user["uid"], section)
 
 
-@router.post("/papers/{paper_id}/explain", response_model=ExplainResponse)
+@router.post("/papers/{paper_id:path}/explain", response_model=ExplainResponse)
 async def explain_text(
     paper_id: str,
     body: ExplainRequest,
@@ -51,7 +51,7 @@ async def explain_text(
     return await reading_service.explain(paper_id, current_user["uid"], body)
 
 
-@router.post("/papers/{paper_id}/highlights", response_model=HighlightItem)
+@router.post("/papers/{paper_id:path}/highlights", response_model=HighlightItem)
 async def create_highlight(
     paper_id: str,
     body: HighlightCreate,
@@ -65,7 +65,7 @@ async def create_highlight(
     )
 
 
-@router.get("/papers/{paper_id}/highlights", response_model=list[HighlightItem])
+@router.get("/papers/{paper_id:path}/highlights", response_model=list[HighlightItem])
 async def list_highlights(
     paper_id: str,
     current_user: dict = Depends(get_current_user),

@@ -38,6 +38,24 @@ type LibraryQaState = {
 
 const LIBRARY_QA_STATE_KEY = "library-qa-state-v1";
 
+const normalizePaperId = (rawId: string): string => {
+  let next = rawId;
+  for (let i = 0; i < 3; i += 1) {
+    try {
+      const decoded = decodeURIComponent(next);
+      if (decoded === next) return decoded;
+      next = decoded;
+    } catch {
+      return next;
+    }
+  }
+  return next;
+};
+
+const getPaperDetailPath = (paperId: string): string => {
+  return `/papers/${encodeURIComponent(normalizePaperId(paperId))}`;
+};
+
 const statusColors: Record<string, string> = {
   READY: "bg-emerald-500/20 text-emerald-400",
   PROCESSING: "bg-amber-500/20 text-amber-400",
@@ -172,7 +190,7 @@ export default function LibraryPage() {
     page_range: number[];
   }) => {
     const targetPage = Math.max(1, citation.page_range?.[0] || 1);
-    return `/papers/${citation.paper_id}?tab=pdf&page=${targetPage}`;
+    return `${getPaperDetailPath(citation.paper_id)}?tab=pdf&page=${targetPage}`;
   };
 
   const fetchData = useCallback(async () => {
@@ -537,7 +555,7 @@ export default function LibraryPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {sortedPapers.map((paper) => (
             <div key={paper.id} className="relative group">
-              <Link href={`/papers/${paper.id}`}>
+              <Link href={getPaperDetailPath(paper.id)}>
                 <div className="glass-card h-full rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] hover:border-primary/30 hover:glow flex flex-col">
                   <div className="flex items-start justify-between mb-3">
                     <span
@@ -619,7 +637,7 @@ export default function LibraryPage() {
         <div className="space-y-2">
           {sortedPapers.map((paper) => (
             <div key={paper.id} className="relative group">
-              <Link href={`/papers/${paper.id}`}>
+              <Link href={getPaperDetailPath(paper.id)}>
                 <div className="glass-card flex items-center gap-4 rounded-xl p-4 transition-all duration-200 hover:border-primary/30">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

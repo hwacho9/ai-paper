@@ -106,7 +106,14 @@ export function PaperHeader({
       </div>
       <div className="mt-4 flex items-center gap-4 border-t border-border pt-4">
         {paper.doi && (
-          <span className="text-xs text-muted-foreground">DOI: {paper.doi}</span>
+          <a
+            href={`https://doi.org/${paper.doi}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-primary underline hover:no-underline"
+          >
+            https://doi.org/{paper.doi}
+          </a>
         )}
         {paper.arxiv_id && (
           <span className="text-xs text-muted-foreground">

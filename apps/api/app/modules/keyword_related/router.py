@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.get(
-    "/papers/{paper_id}/library-related-by-keywords",
+    "/papers/{paper_id:path}/library-related-by-keywords",
     response_model=LibraryRelatedByKeywordResponse,
 )
 async def get_library_related_by_keywords(

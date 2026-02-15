@@ -2,6 +2,7 @@
 D-03: ペーパーライブラリ - サービス
 """
 import re
+from urllib.parse import unquote
 
 from app.modules.papers.repository import PaperRepository
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
@@ -38,7 +39,21 @@ class PaperService:
 
         # 2. 現在のいいね状態を確認
         user_likes = await self.repository.get_user_likes(uid)
-        is_liked = paper_id in user_likes
+        is_liked = False
+        like_candidates: set[str] = set()
+        current = paper_id
+        for _ in range(4):
+            like_candidates.add(current)
+            like_candidates.add(self.repository._sanitize_id(current))
+            try:
+                next_value = unquote(current)
+            except Exception:
+                break
+            if next_value == current:
+                break
+            current = next_value
+
+        is_liked = bool(like_candidates.intersection(set(user_likes)))
 
         if is_liked:
             # Unlike
@@ -100,7 +115,18 @@ class PaperService:
         is_liked = False
         if uid:
             user_likes = await self.repository.get_user_likes(uid)
-            is_liked = paper_id in user_likes
+            candidates: set[str] = set()
+            current = paper_id
+            for _ in range(3):
+                candidates.add(self.repository._sanitize_id(current))
+                try:
+                    next_value = unquote(current)
+                except Exception:
+                    break
+                if next_value == current:
+                    break
+                current = next_value
+            is_liked = bool(candidates & set(user_likes))
             
         return PaperResponse(**paper, is_liked=is_liked)
 
