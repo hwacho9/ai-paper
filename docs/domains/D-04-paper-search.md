@@ -2,21 +2,24 @@
 
 ## ドメイン概要
 
-外部論文データベース（arXiv、Semantic Scholar等）への検索プロキシを担当。結果を内部スキーマに正規化して返却する。
+外部論文データベース（ArXiv / PubMed / Google Scholar 等）への検索と、結果の正規化を担当するドメイン。  
+検索結果にはライブラリ保存済み状態（`is_in_library`）を付与して返却する。
 
 ## 責務境界
 
-- 外部ソースへのキーワード検索（arXiv / Crossref / Semantic Scholar から1〜2つ選択）
+- 外部ソースへのキーワード検索（`auto` / `all` / `arxiv` / `pubmed` / `scholar` / `gemini`）
 - 検索結果の正規化（内部Paperスキーマへのマッピング）
-- キャッシュ管理（同一クエリの短期TTLキャッシュ）
+- 重複除去とランキング（ID重複・タイトル一致ベース）
+- ライブラリ保存済み判定（`is_in_library`）
 
 ## 機能一覧
 
-| 機能ID | 機能名             | 説明                                     |
-| ------ | ------------------ | ---------------------------------------- |
-| F-0401 | キーワード検索     | 外部APIへの検索クエリ送信                |
-| F-0402 | フィルター         | 年度/ジャーナル/著者によるフィルタリング |
-| F-0403 | 検索結果からの保存 | My Paper Libraryへのインポート           |
+| 機能ID | 機能名             | 説明 |
+| ------ | ------------------ | ---- |
+| F-0401 | キーワード検索     | 外部APIへの検索クエリ送信 |
+| F-0402 | ソース最適化       | `auto` 時にクエリ内容から優先ソースを推定 |
+| F-0403 | 重複除去/並び替え  | 外部ID・タイトルを使った重複除去と順位調整 |
+| F-0404 | ライブラリ連携表示 | 検索結果へ `is_in_library` を付与 |
 
 ## API仕様
 
@@ -25,10 +28,7 @@
 - **認証**: 必須
 - **パラメータ**:
   - `q` (string, 必須): 検索キーワード
-  - `year_from` (int, 任意): 開始年
-  - `year_to` (int, 任意): 終了年
-  - `author` (string, 任意): 著者名
-  - `source` (string, 任意): "arxiv" | "semantic_scholar"（デフォルト: "semantic_scholar"）
+  - `source` (string, 任意): `"auto" | "all" | "arxiv" | "pubmed" | "scholar" | "gemini"`（デフォルト: `"auto"`）
   - `limit` (int, 任意): 結果件数（デフォルト: 20、最大: 100）
   - `offset` (int, 任意): オフセット
 - **レスポンス**: `SearchResultListResponse`
@@ -40,14 +40,13 @@ class SearchQuery(BaseModel):
     q: str
     year_from: int | None = None
     year_to: int | None = None
-    author: str | None = None
-    source: str = "semantic_scholar"
+    source: str = "auto"
     limit: int = 20
     offset: int = 0
 
 class SearchResultItem(BaseModel):
-    external_id: str           # 外部ソースのID
-    source: str                # "arxiv" | "semantic_scholar"
+    external_id: str
+    source: str
     title: str
     authors: list[str]
     year: int | None
@@ -56,8 +55,9 @@ class SearchResultItem(BaseModel):
     doi: str | None
     arxiv_id: str | None
     pdf_url: str | None
+    url: str | None = None
     citation_count: int | None
-    is_in_library: bool = False  # ユーザーのライブラリに存在するか
+    is_in_library: bool = False
 
 class SearchResultListResponse(BaseModel):
     results: list[SearchResultItem]
@@ -70,49 +70,25 @@ class SearchResultListResponse(BaseModel):
 
 ### ページ
 
-- `/search` — 検索入力 + 結果リスト
+- `/search` — 検索入力 + ソース選択 + 結果表示
 
-### コンポーネント
+### 実装ポイント
 
-- `SearchBar` — 検索入力（キーワード + フィルター展開）
-- `SearchResults` — 検索結果リスト
-- `SearchResultCard` — 各結果のカード（いいねボタン付き）
-- `SearchFilters` — 詳細フィルター（年度/著者/ソース）
-
-## 検索履歴サジェスト機能（F-0401拡張）
-
-**概要:**
-
-- ユーザーの検索履歴を `localStorage` に保存（キー: `paper-search-history`）
-- 最大10件の検索履歴を保持（FIFO削除）
-- 検索フォーカス時にフィルター済みのサジェスト候補を表示（ドロップダウン）
-
-**フロントエンド実装:**
-
-- `/search` ページ内で検索入力フォーカス時にサジェスト表示
-- 候補をクリックすると該当クエリで検索実行
-- クリックアウト時にドロップダウン自動非表示
-
-**データ保存フォーマット:**
-
-```json
-[
-  { "query": "transformer", "timestamp": 1707873600000 },
-  { "query": "reinforcement learning", "timestamp": 1707873500000 }
-]
-```
+- 検索履歴を `localStorage` に保存（キー: `paper-search-history`、最大10件）
+- ソース選択を `localStorage` に保存（キー: `paper-search-source`）
+- 検索ページ状態（結果/モード）を `sessionStorage` に保存（キー: `paper-search-page-state-v1`）
+- 検索結果から Like トグル可能（D-03 連携）
 
 ## 実装ノート
 
-- **キャッシュ**: 同一クエリは短期TTLキャッシュ（メモリ/Redis代替は後順位）
-- **速度**: 検索UXのためAPI応答は300〜800ms目標
-- **外部API**: 1次は Semantic Scholar API を使用（レート制限に注意）
-- **検索履歴**: ローカル保存（ログイン不要、ブラウザのストレージ依存）
+- `auto` 検索ではクエリ内容から分野推定し、優先ソース順を変える
+- `all` 検索では複数ソースを並列実行して統合する
 
-## TODO一覧
+## 実装ステータス
 
-```python
-# TODO(F-0401): キーワード検索 | AC: 外部API呼び出し+結果正規化 | owner:@
-# TODO(F-0402): フィルター | AC: 年度/著者/ソースによるフィルタリング | owner:@
-# TODO(F-0403): 検索結果保存 | AC: 検索結果からPaperライブラリへのインポート | owner:@
-```
+- 実装済み: キーワード検索 (`GET /api/v1/search/papers`)
+- 実装済み: `auto/all/arxiv/pubmed/scholar/gemini` ソース切替
+- 実装済み: 検索履歴サジェスト（localStorage）
+- 実装済み: 検索結果から Like トグル（D-03）
+- 未実装: `author` パラメータによるフィルタリング
+- 未実装: `year_from/year_to` の実検索反映（スキーマのみ定義）

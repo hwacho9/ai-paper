@@ -2,96 +2,154 @@
 
 ## 概要
 
-本ドキュメントは `task.md` (タスク進行) と `Project Service Structure` (要件定義) を統合した、開発フェーズ管理ドキュメントである。
+本ドキュメントは、現行実装と `docs/` のドメイン定義（D-01〜D-12）をもとにした開発フェーズ管理ドキュメント。
 
 ---
 
 ## Phase 0: 基盤構築 (Done)
 
-- [x] ドメイン仕様書読解 (D-01～D-10)
-- [x] リポジトリ/モノレポ構成 (Next.js + FastAPI)
-- [x] Firestoreスキーマ設計 & GCP環境設定
-- [x] 認証基盤 (Firebase Auth + Backend Middleware)
-- [x] 共通コンポーネント (shadcn/ui + Tailwind)
+- [x] ドメイン仕様書整備（D-01〜D-12）
+- [x] モノレポ構成（Next.js + FastAPI + Worker）
+- [x] 認証基盤（Firebase Auth + Backend Middleware）
+- [x] Firestore / GCP 接続基盤
+- [x] 共通UI基盤（Tailwind + shadcn/ui）
 
 ---
 
-## Phase 1: MVP Core (Search & Library & Memo) - CURRENT
+## Phase 1: MVP Core (Search / Library / Memo) (Done)
 
-> ユーザーが論文を検索し、ライブラリに保存し、メモを残せるようにする。
-> 関連ドメイン: D-03 (Library), D-04 (Search), D-08 (Memo)
+> ユーザーが論文を検索し、保存し、メモできる最小機能。
+> 関連ドメイン: D-03, D-04, D-08
 
 ### バックエンド (FastAPI)
 
-- [x] **D-04 Search**: 論文検索プロキシAPI
-    - `GET /api/v1/search/papers` (Semantic Scholar)
-- [x] **D-03 Library**: 論文保存 & 取得
-    - `POST /api/v1/library/{id}/like` (Toggle Like)
-    - `GET /api/v1/library` (My Library)
-- [x] **D-08 Memo**: メモ自動生成 & CRUD
-    - `POST /api/v1/memos` (Create) - _Auto-generated on Like_
-    - `GET /api/v1/memos` (List)
+- [x] **D-04 Search**
+  - `GET /api/v1/search/papers`
+  - `POST /api/v1/search/papers/recluster`
+- [x] **D-03 Library**
+  - `POST /api/v1/library/{paper_id}/like`
+  - `GET /api/v1/library`
+  - `GET /api/v1/library/{paper_id}`
+- [x] **D-08 Memo CRUD**
+  - `POST /api/v1/memos`
+  - `GET /api/v1/memos`
+  - `GET /api/v1/memos/{memo_id}`
+  - `PATCH /api/v1/memos/{memo_id}`
+  - `DELETE /api/v1/memos/{memo_id}`
+- [ ] **D-08 Memo Auto-create on Like**
+  - `create_auto_memo(...)` 実装はあるが Like フロー未接続
 
 ### フロントエンド (Next.js)
 
-- [x] **Search Page**: 検索 UI + 検索実行 + いいねボタン (API連携)
-- [x] **Library Page**: 保存済み論文一覧 (API連携)
-- [x] **Memo Page**: メモ一覧表示 (API連携)
-- [x] **Refactoring**: `api.ts` のモジュール分割 (`client`, `search`, `papers`, `memos`)
+- [x] **Search Page**: `/search`
+- [x] **Library Page**: `/library`
+- [x] **Memo Page**: `/memos`
+- [x] **Paper Detail Memo連携**: `/papers/[id]`
 
 ---
 
-## Phase 2: Project & Graph (Next Step)
+## Phase 2: Project & Graph (Done)
 
-> ユーザーが「自分の論文プロジェクト」を作成し、関連論文を体系化する。
-> 関連ドメイン: D-02 (Project), D-07 (Graph)
+> ユーザーが論文をプロジェクトとして整理し、関係を可視化する。
+> 関連ドメイン: D-02, D-07
 
 ### バックエンド
 
-- [ ] **D-02 Project**: プロジェクト CRUD
-    - `POST /projects` (Create Project)
-    - `POST /projects/{id}/papers` (Add Paper to Project)
-- [ ] **D-07 Graph**: 関連論文グラフデータ提供
-    - `GET /papers/{id}/related` (Mock/Simple Logic)
+- [x] **D-02 Project CRUD**
+  - `POST /api/v1/projects`
+  - `GET /api/v1/projects`
+  - `GET /api/v1/projects/{project_id}`
+  - `PATCH /api/v1/projects/{project_id}`
+  - `DELETE /api/v1/projects/{project_id}`
+- [x] **D-02 Project Papers**
+  - `POST /api/v1/projects/{project_id}/papers`
+  - `DELETE /api/v1/projects/{project_id}/papers/{paper_id}`
+  - `GET /api/v1/projects/{project_id}/papers`
+- [x] **D-07 Related/Graph**
+  - `GET /api/v1/papers/{paper_id}/related`
+  - `GET /api/v1/graph`
+  - `GET /api/v1/projects/{project_id}/graph`
 
 ### フロントエンド
 
-- [ ] **Project List/Detail**: プロジェクト管理 UI
-- [ ] **Graph View**: 論文関係の可視化 (Canvas/D3)
+- [x] **Project List**: `/projects`
+- [x] **Project Detail**: `/projects/[id]`
+- [x] **Graph View**: `/graph`
 
 ---
 
-## Phase 3: Ingestion Pipeline & Reading Support
+## Phase 3: Ingestion Pipeline & Reading Support (Mostly Done)
 
-> PDFを解析し、RAG (Retrieval-Augmented Generation) や高度な読書支援を提供する。
-> 関連ドメイン: D-05 (Ingestion), D-09 (Reading)
+> PDF解析と読解支援（RAG/ハイライト/アウトライン）。
+> 関連ドメイン: D-05, D-09
 
 ### バックエンド/パイプライン
 
-- [x] **D-05 Ingestion**: PDF Upload & Parsing Pipeline
-    - [x] PDF Upload API -> Firebase Storage
-    - [x] Cloud Run Job Worker (Parse/Chunk/Embed/Index)
-    - [x] Vector Search Indexing
-- [x] **D-09 Reading**: チャンクAPI + ハイライト + ライブラリRAG質問
-    - [x] `GET /api/v1/papers/:id/outline`
-    - [x] `GET /api/v1/papers/:id/chunks`
-    - [x] `POST /api/v1/papers/:id/explain`
-    - [x] `POST /api/v1/papers/:id/highlights`
-    - [x] `GET /api/v1/papers/:id/highlights`
-    - [x] `POST /api/v1/library/ask`
+- [x] **D-05 Ingestion**
+  - `POST /api/v1/library/{paper_id}/upload`
+  - `POST /api/v1/library/{paper_id}/ingest`
+  - Worker: Parse/Chunk/Embed/Index
+- [x] **D-09 Reading APIs**
+  - `GET /api/v1/papers/{paper_id}/outline`
+  - `GET /api/v1/papers/{paper_id}/chunks`
+  - `POST /api/v1/papers/{paper_id}/explain`
+  - `POST /api/v1/papers/{paper_id}/highlights`
+  - `GET /api/v1/papers/{paper_id}/highlights`
+  - `POST /api/v1/library/ask`
 
 ### フロントエンド
 
-- [ ] **PDF Viewer**: ハイライト機能付きビューア
-- [x] **Ask Paper**: 論文への質問 (RAG) — `apps/web/src/app/library/page.tsx`
+- [x] **Ask Library (RAG)**: `/library`
+- [x] **Paper PDF表示**: `/papers/[id]`
+- [ ] **ハイライト編集UXの磨き込み**（保存/表示の統合体験は要改善）
 
 ---
 
-## Phase 4: Polish & Advanced Features
+## Phase 4: Keyword & TeX (Done for Basic Scope)
 
-> キーワード管理、TeX Export、コラボレーション機能など。
-> 関連ドメイン: D-06 (Keyword), D-10 (TeX)
+> キーワード運用とプロジェクト配下 TeX ワークスペース。
+> 関連ドメイン: D-06, D-10
 
-- [ ] **D-06 Keyword**: 自動タグ付け & 管理
-- [ ] **D-10 TeX**: BibTeX Export & TeX Editor (Basic)
-- [ ] **UX Improvements**: ローディング、エラーハンドリング、レスポンシブ調整
+### バックエンド
+
+- [x] **D-06 Keyword CRUD + Tagging + Suggest**
+  - `/api/v1/keywords*`
+  - `/api/v1/papers/{paper_id}/keywords*`
+- [x] **D-10 TeX Workspace APIs（projects配下）**
+  - `/api/v1/projects/{project_id}/tex/*`
+  - compile/preview を含む
+- [ ] **D-10 texdocs API公開**（`app.modules.tex` は未マウント）
+
+### フロントエンド
+
+- [x] **Keyword UI**: `/papers/[id]`（タグ編集・推薦連携）
+- [x] **TeX Editor Basic**: `/projects/[id]`（ファイル操作・コンパイル・プレビュー）
+
+---
+
+## Phase 5: Agent & Keyword-driven Related (Done for Initial Scope)
+
+> 自然言語エージェント実行とキーワード起点関連表示。
+> 関連ドメイン: D-11, D-12
+
+### バックエンド
+
+- [x] **D-11 AI Agent**
+  - `POST /api/v1/agent/chat`
+  - plan生成/実行/検証/再試行候補返却
+- [x] **D-12 Keyword-driven Related**
+  - `GET /api/v1/papers/{paper_id}/library-related-by-keywords`
+
+### フロントエンド
+
+- [x] **D-12 Related Panel連携**: `/papers/[id]?tab=related`
+- [ ] **D-11 チャットUIの最終統合/運用導線の明確化**（APIは実装済み）
+
+---
+
+## 現在の主フォーカス（運用上）
+
+- [ ] UX改善（ローディング/エラー文言/レスポンシブ）
+- [ ] D-08 メモ自動生成フックの接続
+- [ ] D-10 `texdocs` 系の扱い方針確定（廃止 or 実装）
+- [ ] D-09 ハイライト体験の完成度向上

@@ -19,6 +19,13 @@
 
 ## 画面上の機能（ユーザー操作）
 
+### 0. 認証 (`/login`)
+
+- Email/Password ログイン
+- Email/Password 新規登録（表示名入力）
+- Google OAuth ログイン
+- ログイン中ユーザー情報の表示・ログアウト（サイドバー下部）
+
 ### 1. 検索 (`/search`)
 
 - 論文検索（`auto/all/arxiv/pubmed/scholar/gemini`）
@@ -69,7 +76,7 @@
 ### 7. グラフ (`/graph`)
 
 - グローバルグラフ表示
-- プロジェクト単位グラフ表示（`/projects/{id}/graph`）
+- プロジェクト単位グラフ表示（`/projects/{project_id}/graph`）
 
 ## APIアクション一覧（エージェント実行単位）
 
@@ -79,6 +86,9 @@
 | --- | --- |
 | 自分のプロフィール取得 | `GET /api/v1/me` |
 | 自分のプロフィール更新 | `PATCH /api/v1/me` |
+
+- `GET /api/v1/me`: 初回ログイン時は `users/{uid}` を自動作成
+- `PATCH /api/v1/me`: API は実装済み（フロントの専用プロフィール編集画面は未実装）
 
 ### 検索
 
@@ -116,6 +126,7 @@
 | --- | --- |
 | TeXファイル一覧 | `GET /api/v1/projects/{project_id}/tex/files` |
 | TeXファイル内容取得 | `GET /api/v1/projects/{project_id}/tex/file?path=...` |
+| TeXファイルバイナリ取得 | `GET /api/v1/projects/{project_id}/tex/file/raw?path=...` |
 | TeXファイル保存 | `POST /api/v1/projects/{project_id}/tex/file` |
 | TeXファイル削除 | `DELETE /api/v1/projects/{project_id}/tex/file?path=...` |
 | TeXファイルアップロード | `POST /api/v1/projects/{project_id}/tex/upload` |
@@ -164,6 +175,25 @@
 | 関連論文取得 | `GET /api/v1/papers/{paper_id}/related` |
 | グローバルグラフ取得 | `GET /api/v1/graph` |
 | プロジェクトグラフ取得 | `GET /api/v1/projects/{project_id}/graph` |
+
+### AIエージェント
+
+| 操作 | メソッド/パス |
+| --- | --- |
+| 自然言語で計画生成/実行 | `POST /api/v1/agent/chat` |
+
+補足:
+- `execute=false` で計画のみ生成（実行なし）。
+- `execute=true` で `steps`, `verification`, `pending_actions` を返却。
+
+### キーワード起点ライブラリ関連（D-12）
+
+| 操作 | メソッド/パス |
+| --- | --- |
+| キーワード別ライブラリ関連取得 | `GET /api/v1/papers/{paper_id}/library-related-by-keywords` |
+
+補足:
+- クエリ: `per_keyword_limit`（1..20, default=15）, `max_keywords`（1..20, default=8）
 
 ## 注意点（エージェント設計時）
 

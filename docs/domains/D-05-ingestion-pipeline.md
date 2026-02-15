@@ -2,187 +2,144 @@
 
 ## ドメイン概要
 
-PDF → テキスト抽出 → セクション分割 → チャンク生成 → 埋め込み生成 → Vector Searchインデックス更新までの非同期パイプラインを担当。
+論文PDFの取り込み処理（Parse -> Chunk -> Embed -> Index）を非同期で実行し、
+Firestore の論文状態とチャンクデータを更新するドメイン。
 
 ## 責務境界
 
-- Pub/Sub トリガーによるパイプライン起動
-- PDF パースおよびセクション構造化
-- チャンク/メタ（セクション、ページ、オフセット）生成
-- Vertex AI Embedding 生成およびインデックス登録
-- Firestore 状態更新（INGESTING → READY / FAILED）
+- 取り込みジョブの起動（Cloud Run Jobs / ローカル実行）
+- PDFの取得とテキスト抽出
+- チャンク生成
+- 埋め込み生成（Vertex AI）
+- Vector Search へのアップサート
+- Firestore 状態更新（`INGESTING -> READY/FAILED`）
 
 ## 機能一覧
 
-| 機能ID | 機能名                         | 説明                                         |
-| ------ | ------------------------------ | -------------------------------------------- |
-| F-0501 | パイプライントリガー           | Pub/Subイベント受信でJob起動                 |
-| F-0502 | PDFパース                      | テキスト/セクション抽出                      |
-| F-0503 | チャンク生成                   | セクション/ページ/オフセットメタ付きチャンク |
-| F-0504 | 埋め込み生成・インデックス登録 | Vertex Embedding + Vector Search更新         |
-| F-0505 | 状態更新                       | READY/FAILEDのFirestore反映                  |
+| 機能ID | 機能名                         | 説明 |
+| ------ | ------------------------------ | ---- |
+| F-0501 | パイプライントリガー           | API から Cloud Run Jobs を起動 |
+| F-0502 | PDFパース                      | Storage上PDFをページ単位テキストへ変換 |
+| F-0503 | チャンク生成                   | 文字数ベースのスライディングウィンドウ分割 |
+| F-0504 | 埋め込み生成・インデックス登録 | `text-embedding-004` と Vector Search 更新 |
+| F-0505 | 状態更新                       | `papers/{paperId}` の状態・エラー情報更新 |
 
-### 2. Cloud Run Jobs デプロイ
+## 実行トリガー（現行）
 
-```bash
-# Workerのビルド & デプロイ
-gcloud builds submit --tag gcr.io/PROJECT_ID/paper-ingest-worker ./apps/api
+現行実装は Pub/Sub 主体ではなく、API 経由の直接起動。
 
-# Job作成 (環境変数は適宜設定)
-gcloud run jobs create paper-ingest-worker \
-  --image gcr.io/PROJECT_ID/paper-ingest-worker \
-  --region asia-northeast1 \
-  --set-env-vars=GCP_PROJECT_ID=PROJECT_ID,GCS_BUCKET_PDF=BUCKET_NAME
-```
+- `POST /api/v1/library/{paper_id}/ingest`
+  - 手動インジェスト起動
+- `POST /api/v1/library/{paper_id}/upload`
+  - PDFアップロード後にインジェスト起動
+- `POST /api/v1/library/{paper_id}/like`
+  - `pdf_url` がPDFらしい場合のみ自動インジェスト起動
 
-### 3. トリガー構成 (Phase 1 vs Future)
-
-**Phase 1 (Current): Direct Trigger**
-APIサーバーが PDF Upload 完了後に `Cloud Run Client` を使用して直接 Job を起動する。
-これによりインフラ構成を単純化しつつ、非同期処理を実現する。
-
-**Future (Phase 3+): Pub/Sub Trigger**
-システムが大規模化した際、API と Worker の間に Pub/Sub を挟み、Eventarc 等を経由して Job を起動する構成へ移行する。
-コード上は `IngestRequest` インターフェースを共通化し、呼び出し元が変わってもロジックを変更しないように設計する。
-
-### メッセージフォーマット (共通)
-
-Pub/Sub メッセージボディ、または Job 実行時の環境変数/引数として以下の情報を渡す。
+起動時に Worker へ以下を渡す。
 
 ```json
 {
-    "paperId": "string",
-    "ownerUid": "string",
-    "pdfStoragePath": "papers/{uid}/{paperId}.pdf", // Firebase Storage Path
-    "requestId": "string",
-    "timestamp": "2026-01-01T00:00:00Z"
+  "PAPER_ID": "string",
+  "OWNER_UID": "string",
+  "REQUEST_ID": "manual-... or auto-...",
+  "PDF_URL": "string | null"
 }
 ```
 
-### PaperChunk
+## パイプライン処理フロー
 
+1. `papers/{paperId}.status` を `INGESTING` に更新
+2. PDF取得
+3. PDFパース（PyMuPDF）
+4. チャンク生成
+5. 埋め込み生成（Vertex AI）
+6. Vector Searchアップサート
+7. `papers/{paperId}/chunks` に保存
+8. `papers/{paperId}.status` を `READY` に更新
+
+例外時は `status=FAILED` に更新し、`error` を記録する。
+
+## データモデル（実装）
+
+### papers/{paperId} への更新
+
+```json
+{
+  "status": "INGESTING | READY | FAILED",
+  "updatedAt": "serverTimestamp",
+  "lastRequestId": "string",
+  "startedAt": "serverTimestamp",
+  "error": "string | null"
+}
 ```
-papers/{paperId}/chunks/{chunkId}
+
+### papers/{paperId}/chunks/{chunkId}
+
+```json
 {
   "paperId": "string",
   "chunkId": "string",
-  "section": "string",
   "text": "string",
-  "pageRange": [1, 3],
-  "offset": 0,
-  "tokenCount": 512,
-  "embeddingRef": "string"
+  "pageNumber": 1,
+  "tokenCount": 123,
+  "updatedAt": "serverTimestamp"
 }
 ```
 
-## イベント設計
+補足:
+- `section`, `pageRange`, `embeddingRef` は現行の保存モデルには含まれない
+- 埋め込みベクトル本体は Firestore に保存しない
 
-| イベント名               | 用途                |
-| ------------------------ | ------------------- |
-| `paper.ingest.requested` | PDF取り込み開始依頼 |
-| `paper.ingest.completed` | 取り込み完了通知    |
-| `paper.ingest.failed`    | 取り込み失敗通知    |
+## 実装詳細
 
-### メッセージフォーマット
+### Trigger/Job実行
 
-```json
-{
-    "paperId": "string",
-    "ownerUid": "string",
-    "pdfUrl": "gs://bucket/path/to/pdf",
-    "requestId": "string",
-    "timestamp": "2026-01-01T00:00:00Z"
-}
-```
+- API 側は `execute_ingest_job(...)` を呼び出す
+- `run_ingest_locally=true` のときは Worker を同一プロセスで非同期起動
+- それ以外は Cloud Run Jobs を `RunJobRequest` で実行
 
-## 失敗/リトライポリシー
+### Parse
 
-1. **パース失敗**: 1回リトライ → FAILED
-2. **埋め込み/インデックス失敗**: 指数バックオフで最大3回リトライ
-3. すべての例外はキャッチしてFirestoreにエラー状態を反映
+- Storage パス規約: `papers/{ownerUid}/{paperId}.pdf`
+- `pdf_url` が渡され、StorageにPDFがない場合は外部URLから取得して保存
+- パースはページごとに `text` を抽出
 
-## 冪等性保証
+### Chunk
 
-- 同じ `paperId` で再実行可能（既存チャンク/エンベディングを上書き）
-- Vector Searchはアップサート（upsert）で既存データを更新
+- 文字数ベース
+  - `CHUNK_SIZE=1000`
+  - `CHUNK_OVERLAP=200`
+- `chunk_id` は UUID
 
-## 構造化ログ
+### Embed
 
-```python
-# 各ステップで以下のフィールドを含む
-{
-    "requestId": "uuid",
-    "paperId": "string",
-    "step": "parse" | "chunk" | "embed" | "index",
-    "duration_ms": 1234,
-    "status": "success" | "error",
-    "error": "string | null"
-}
-```
+- モデル: `text-embedding-004`
+- バッチ: 5件ずつ
+- Task Type: `RETRIEVAL_DOCUMENT`
 
-## TODO一覧
+### Index
 
-```python
-# [x] (F-0501): パイプライントリガー | AC: Pub/Subメッセージ受信→Job起動 | Status: Done (Direct Trigger implemented)
-# [x] (F-0502): PDFパース | AC: テキスト+セクション抽出成功 | Status: Done
-# [x] (F-0503): チャンク生成 | AC: セクション/ページ/オフセットメタ付きチャンク生成 | Status: Done
-# [x] (F-0504): 埋め込み+インデックス | AC: Vertex Embedding生成+Vector Search登録 | Status: Done
-# [x] (F-0505): 状態更新 | AC: INGESTING→READY/FAILED遷移 | Status: Done
-```
+- Vector Search へ `upsert_datapoints`
+- restricts:
+  - `paper_id`
+  - `owner_uid`
+- `VECTOR_INDEX_ID` 未設定時はインデックス更新をスキップ（Mock扱い）
 
-## API (Backend)
+## 失敗時の扱い
 
-`POST /api/v1/papers/{paper_id}/upload`
+- 途中例外はキャッチして `FAILED` へ更新
+- API 側のジョブ起動失敗はログ記録（非同期処理のためAPI全体は止めない設計）
 
-- `multipart/form-data`: `file` (PDF)
-- 処理: PDFをFirebase Storageに保存し、Ingestion Jobを起動する。
+## 現状の注意点
 
-## Pub/Sub & Cloud Run Jobs 設定
+- 仕様上の Pub/Sub/Eventarc 主体フローは未採用（将来拡張候補）
+- チャンクIDが毎回 UUID のため、厳密な再実行冪等（同一ID上書き）にはなっていない
+- `tokenCount` は文字数ベースの簡易値
 
-### 1. Pub/Sub トピック作成
+## 実装ステータス
 
-```bash
-# トピック作成
-gcloud pubsub topics create paper.ingest.requested
-```
-
-### 2. Cloud Run Jobs デプロイ
-
-```bash
-# Workerのビルド & デプロイ
-gcloud builds submit --tag gcr.io/PROJECT_ID/paper-ingest-worker ./apps/api
-
-gcloud run jobs create paper-ingest-worker \
-  --image gcr.io/PROJECT_ID/paper-ingest-worker \
-  --region asia-northeast1 \
-  --set-env-vars=GCP_PROJECT_ID=PROJECT_ID,GCS_BUCKET_PDF=BUCKET_NAME
-```
-
-### 3. Eventarc トリガー作成 (Pub/Sub → Cloud Run Jobs)
-
-Cloud Run Jobs は直接 Pub/Sub をトリガーにできないため、**Eventarc** または **Cloud Workflows** を経由するか、
-**Push Subscription** を受け取る **Cloud Run Service (API)** が Job を `Execute` する構成にする。
-本プロジェクトでは **API Service が Pub/Sub を受信し、Job を起動する** 構成、または **API が直接 Job を起動** する簡易構成を採用する。
-
-> **簡易構成案 (Phase 1/2)**:
-> API (`POST /papers`) が PDF Upload 完了後に直接 `Cloud Run Jobs Client` で Job を起動する。
-> Pub/Sub は非同期分離が必要になった段階で導入する。
-
-### メッセージフォーマット (Event)
-
-```json
-{
-    "paperId": "string",
-    "ownerUid": "string",
-    "pdfStoragePath": "papers/{uid}/{paperId}.pdf", // Firebase Storage Path
-    "requestId": "string",
-    "timestamp": "2026-01-01T00:00:00Z"
-}
-```
-
-## Cloud Run Jobs 設定
-
-- CPU: 2 vCPU / メモリ: 2〜4GB
-- 同時実行数: 1（推奨）
-- タイムアウト: 10〜30分
-- リトライ: 最大3回
+- 実装済み: API起点での非同期インジェスト起動
+- 実装済み: Parse -> Chunk -> Embed -> Index の処理
+- 実装済み: Firestore 状態更新（`INGESTING/READY/FAILED`）
+- 実装済み: `pdf_url` 指定時の自動ダウンロード補完
+- 未実装: Pub/Sub/Eventarc 主体の本格イベント駆動運用

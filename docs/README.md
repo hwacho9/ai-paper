@@ -10,26 +10,30 @@
 
 - [Firestoreスキーマ設計](./firestore-schema.md)
 - [API仕様書](./api-contracts.md)
+- [画面遷移図](./screen-flow.md)
+- [ユースケース一覧（ユーザー視点）](./use-case.md)
 
 ```
 ── apps/
 │   ├── web/                    # Next.js フロントエンド
 │   │   └── src/
-│   │       ├── app/            # 8 App Router ページ
-│   │       ├── components/ui/  # 10 shadcn/ui コンポーネント
-│   │       └── lib/api.ts      # 型付きAPIフェッチラッパー
+│   │       ├── app/            # App Router ページ群（search, library, papers, projects, memos, graph など）
+│   │       ├── components/ui/  # 共通UIコンポーネント
+│   │       └── lib/api/        # 型付きAPIクライアント群
 │   └── api/                    # FastAPI バックエンド
 │       ├── app/
 │       │   ├── core/           # config, firebase_auth, firestore
 │       │   ├── main.py         # エントリーポイント + CORS + /healthz
-│       │   └── modules/        # 9ドメインモジュール
+│       │   └── modules/        # ドメインモジュール
 │       │       ├── auth/       # D-01
+│       │       ├── agent/      # D-11
 │       │       ├── papers/     # D-03
 │       │       ├── projects/   # D-02
 │       │       ├── search/     # D-04
 │       │       ├── memos/      # D-08
 │       │       ├── keywords/   # D-06
 │       │       ├── related/    # D-07
+│       │       ├── keyword_related/ # D-12
 │       │       ├── reading/    # D-09
 │       │       └── tex/        # D-10
 │       ├── worker/             # D-05 パイプライン
@@ -42,6 +46,31 @@
 ├── infra/                      # GCPインフラスペック
 ├── docs/                       # 設計ドキュメント
 └── .agent/workflows/           # 開発スキル
+```
+
+```mermaid
+flowchart LR
+  subgraph Client["Client"]
+    Browser["Browser"]
+    WebApp["Next.js App"]
+    Browser --> WebApp
+  end
+
+  WebApp -->|HTTPS| APIGateway["FastAPI (/api/v1)"]
+
+  subgraph Backend["Backend"]
+    APIGateway
+    Worker["Ingestion Worker (Cloud Run Job / Local)"]
+  end
+
+  APIGateway --> Firestore[(Firestore)]
+  APIGateway --> GCS[(Cloud Storage)]
+  APIGateway --> Vertex["Vertex AI / Vector Search"]
+
+  APIGateway -->|ingest trigger| Worker
+  Worker --> GCS
+  Worker --> Firestore
+  Worker --> Vertex
 ```
 
 ### ドメイン機能書（D-01〜D-12）
@@ -60,6 +89,7 @@
 | D-08 | メモ & ノート        | [D-08-memo-notes.md](./domains/D-08-memo-notes.md)                 |
 | D-09 | 読解サポート         | [D-09-reading-support.md](./domains/D-09-reading-support.md)       |
 | D-10 | TeX & BibTeX         | [D-10-tex-bibtex.md](./domains/D-10-tex-bibtex.md)                 |
+| D-11 | AIエージェント       | [D-11-ai-agent.md](./domains/D-11-ai-agent.md)                     |
 | D-12 | キーワード起点ライブラリ関連 | [D-12-keyword-library-related.md](./domains/D-12-keyword-library-related.md) |
 
 ### 開発ガイド

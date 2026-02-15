@@ -3,7 +3,7 @@
 ## 1) 概要
 
 - 検索は **フロントエンドの検索UI** → **APIルーター** → **SearchService** の順で処理されます。
-- 利用可能ソース: `arxiv`, `pubmed`, `scholar`, `gemini`
+- 利用可能ソース（バックエンド）: `arxiv`, `pubmed`, `scholar`, `gemini`
 - 検索モード:
     - `auto`（デフォルト）: クエリの分野を推定して優先ソースを自動選択
     - `all`: 3ソースを並列取得して統合
@@ -30,10 +30,11 @@
 - ファイル: `apps/web/src/app/search/page.tsx`
 - `handleSearch` が `searchPapers({ q: trimmedQuery, source: searchSource, limit: 20 })` を実行
 
-### 3.2 ソース切替
+### 3.2 ソース切替（UI）
 
 - 選択肢: `auto`, `all`, `arxiv`, `pubmed`, `scholar`
 - 選択値は `localStorage` の `paper-search-source` に保存し、次回起動時に復元
+- 補足: `gemini` はAPI上は指定可能だが、現行UIのセレクタには表示していない
 
 ---
 
@@ -46,6 +47,9 @@
     - `limit?: number`
     - `offset?: number`
     - `year_from`, `year_to`
+- 補足:
+    - 現行の検索画面実装は主に `q`, `source`, `limit` を利用
+    - `year_from`, `year_to` はAPIクライアント型にはあるが、現在のバックエンドルーターでは未使用
 
 ---
 
@@ -109,8 +113,8 @@
 
 1. `cleaned_query` を生成
 2. 候補クエリを作成
-    - `ti:"{query}"`（タイトル優先）
-    - `all:{query}`
+    - クエリに空白を含む場合のみ `ti:"{query}"`（タイトル優先）を追加
+    - 常に `all:{query}` を追加
 3. 候補を順に取得
 4. ArXiv ID で重複排除
 5. 結果数が `limit` なら即停止

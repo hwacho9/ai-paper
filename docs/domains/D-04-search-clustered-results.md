@@ -23,7 +23,7 @@
 - 非対象: ライブラリ保存、PDF取り込み、メモ機能の挙動変更
 - 既存 `GET /api/v1/search/papers` は互換維持（フォールバック用途）
 
-## 新API（提案）
+## API
 
 ### `POST /api/v1/search/papers/recluster`
 
@@ -35,7 +35,7 @@
 ```json
 {
   "query": "graph neural networks for molecule property prediction",
-  "source": "semantic_scholar",
+  "source": "auto",
   "top_k": 60,
   "group_target": 4,
   "include_related": true
@@ -56,15 +56,19 @@
         "paper_id": "paper-001",
         "title": "Neural Message Passing for Quantum Chemistry",
         "year": 2017,
-        "source": "semantic_scholar",
-        "score": 0.93
+        "source": "scholar",
+        "score": 0.93,
+        "relation_type": null,
+        "relation_note": null
       },
       "children": [
         {
           "paper_id": "paper-010",
           "title": "Improved Message Passing ...",
           "year": 2019,
-          "relation_type": "extends",
+          "source": "arxiv",
+          "relation_type": "発展",
+          "relation_note": "予測精度向上への拡張",
           "score": 0.88
         }
       ],
@@ -73,7 +77,9 @@
           "paper_id": "paper-099",
           "title": "A Survey on Molecular GNNs",
           "year": 2021,
-          "relation_type": "survey",
+          "source": "pubmed",
+          "relation_type": "サーベイ",
+          "relation_note": "研究潮流の整理",
           "score": 0.81
         }
       ]
@@ -89,12 +95,12 @@
 }
 ```
 
-## データモデル（Pydantic案）
+## データモデル（実装）
 
 ```python
 class ReclusterSearchRequest(BaseModel):
     query: str
-    source: Literal["semantic_scholar", "arxiv"] = "semantic_scholar"
+    source: Literal["auto", "all", "arxiv", "pubmed", "scholar", "gemini"] = "auto"
     top_k: int = 60
     group_target: int = 4
     include_related: bool = True
@@ -105,7 +111,8 @@ class ClusterPaperItem(BaseModel):
     year: int | None
     source: str
     score: float
-    relation_type: str | None = None  # extends / applies / compares / survey ...
+    relation_type: str | None = None
+    relation_note: str | None = None
 
 class SearchCluster(BaseModel):
     cluster_id: str
@@ -122,7 +129,7 @@ class ReclusterSearchResponse(BaseModel):
     meta: dict[str, Any]
 ```
 
-## バックエンド実装方針
+## バックエンド実装概要
 
 1. 候補取得（既存検索の再利用）
 2. 候補を軽量整形（title/abstract/year/citation_count 等）
@@ -131,13 +138,13 @@ class ReclusterSearchResponse(BaseModel):
 5. 不正データを除去し `uncertain_items` へ退避
 6. 最終レスポンスを返却
 
-### 既存AI検索との噛み合わせ
+### 既存検索との噛み合わせ
 
 - 入口は既存 `search` モジュールの候補取得ロジックを使う
-- 再整理のみ新サービス `recluster_service.py` で実施（LLM呼び出し）
-- LLM障害時は既存のフラット検索結果を `clusters=[]` + `fallback_used=true` で返す
+- 再整理は `recluster` サービスで実施
+- LLM障害時は `fallback-1` クラスタを返し、`meta.fallback_used=true` を返す
 
-## フロントエンド実装方針
+## フロントエンド実装
 
 - `/search` に表示モードを追加
   - `list`（既存）
@@ -147,41 +154,17 @@ class ReclusterSearchResponse(BaseModel):
   - Childrenリスト
   - Relatedリスト
 - 「保存（Like）」導線は既存カード操作を共通利用
+- 再整理結果の取得失敗時は `list` に戻してトースト表示
 
-## APIモジュール変更案（web）
+## 実装ステータス
 
-- `apps/web/src/lib/api/search.ts`
-  - `searchPapersReclustered(data)` を追加
-  - 既存 `searchPapers` は維持
+- 実装済み: `POST /api/v1/search/papers/recluster`
+- 実装済み: `source/top_k/group_target/include_related` の受け付け
+- 実装済み: `relation_type` と `relation_note` を含むクラスタ項目
+- 実装済み: フロント `list/organized` 切替
+- 実装済み: API失敗時の `list` フォールバック
+- 仕様注意: バックエンドのフォールバック応答は `clusters=[]` ではなく `fallback-1` クラスタ1件
 
-## APIモジュール変更案（api）
+## 備考
 
-- `apps/api/app/modules/search/router.py`
-  - `POST /api/v1/search/papers/recluster` を追加
-- `apps/api/app/modules/search/service.py`
-  - 既存検索取得 + 再整理パイプラインを呼ぶ
-- `apps/api/app/modules/search/schemas.py`
-  - Request/Responseスキーマを追加
-
-## 段階導入（推奨）
-
-1. Step 1: 新APIを追加し、LLMで hub/children/related を生成
-2. Step 2: 失敗時フォールバック（既存list）を実装
-3. Step 3: UIで `list` / `organized` を切替可能にする
-4. Step 4: relation_type の安定化（プロンプト調整）
-
-## 受け入れ基準（AC）
-
-- クエリ実行時、1件以上のグループが返る（0件時は空配列）
-- 各グループに `hub_paper` が必ず1件ある
-- 既存検索APIのレスポンス互換を壊さない
-- フロントで `list` / `organized` を切替可能
-- 失敗時にフォールバック（list表示）できる
-
-## TODO
-
-```python
-# TODO(F-0404, MIRO:UI-SEARCH-CLUSTER-01): LLM再整理検索API | AC: hub/children/related を返却 | owner:@
-# TODO(F-0405, MIRO:UI-SEARCH-CLUSTER-02): 検索UI再整理表示 | AC: list/organized切替、Like導線維持 | owner:@
-# TODO(F-0406, MIRO:UI-SEARCH-CLUSTER-03): フォールバック設計 | AC: API失敗時に既存リストへ自動退避 | owner:@
-```
+- 再整理は候補検索結果の品質に依存するため、`source=auto` を基本推奨とする
