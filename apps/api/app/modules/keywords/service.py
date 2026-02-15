@@ -104,6 +104,10 @@ class KeywordService:
             source="manual",
             reason=reason,
         )
+        
+        # Sync to paper document
+        await self._sync_paper_keywords(paper_id, owner_uid)
+        
         return PaperKeywordResponse(**tagged)
 
     async def list_paper_keywords(self, paper_id: str, owner_uid: str) -> PaperKeywordListResponse:
@@ -125,6 +129,9 @@ class KeywordService:
         removed = await self.repository.untag_paper_keyword(paper_id, keyword_id)
         if not removed:
             raise HTTPException(status_code=404, detail="paper keyword not found")
+
+        # Sync to paper document
+        await self._sync_paper_keywords(paper_id, owner_uid)
 
     async def _ensure_paper_access(self, owner_uid: str, paper_id: str) -> None:
         """
@@ -207,6 +214,9 @@ class KeywordService:
                 )
             )
 
+        # Sync to paper document
+        await self._sync_paper_keywords(paper_id, owner_uid)
+
         return KeywordSuggestionResponse(
             paper_id=paper_id,
             suggestions=applied,
@@ -222,6 +232,39 @@ class KeywordService:
             await self.suggest_and_apply(paper_id, owner_uid)
         except Exception as exc:  # noqa: BLE001
             logger.warning("auto keyword suggestion failed: %s", exc)
+
+
+    async def _sync_paper_keywords(self, paper_id: str, owner_uid: str) -> None:
+        """
+        論文のキーワード一覧をPaperドキュメントのkeywords/prerequisiteKeywordsフィールドに同期する。
+        """
+        try:
+            items = await self.repository.list_paper_keywords(paper_id, owner_uid)
+            
+            keywords = []
+            prerequisite_keywords = []
+            
+            for item in items:
+                label = item.get("label", "")
+                if not label:
+                    continue
+                
+                reason = item.get("reason", "")
+                
+                # 事前知識キーワードの判定 (reasonに "prerequisite" が含まれる場合)
+                if "prerequisite" in reason:
+                    prerequisite_keywords.append(label)
+                else:
+                    keywords.append(label)
+            
+            # Update paper document
+            await self.paper_repository.update(paper_id, {
+                "keywords": keywords,
+                "prerequisiteKeywords": prerequisite_keywords
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to sync paper keywords: {e}")
 
 
 keyword_service = KeywordService()

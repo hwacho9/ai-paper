@@ -12,6 +12,8 @@ export interface Paper {
   pdf_url: string | null;
   status: string;
   is_liked: boolean;
+  keywords?: string[];
+  prerequisite_keywords?: string[];
   created_at: string | null;
   updated_at: string | null;
 }

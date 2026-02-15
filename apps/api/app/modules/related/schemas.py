@@ -1,27 +1,30 @@
-"""D-07: 関連グラフ - スキーマ"""
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-
-class RelatedPaperResponse(BaseModel):
-    paper_id: str
+class RelatedPaper(BaseModel):
+    paper_id: str = Field(..., alias="paperId")
     title: str
-    score: float
-    reasons: list[dict] = []
+    authors: List[str]
+    year: Optional[int] = None
+    venue: Optional[str] = None
+    abstract: Optional[str] = None
+    similarity: float
+    citation_count: int = Field(0, alias="citationCount")
 
-
-class GraphNode(BaseModel):
+class Node(BaseModel):
     id: str
     label: str
-    x: float = 0
-    y: float = 0
+    group: Optional[str] = None # e.g. based on keywords or year
+    val: int = 1 # visual size
 
-
-class GraphEdge(BaseModel):
+class Edge(BaseModel):
     source: str
     target: str
-    weight: float = 0
+    value: float # similarity score
 
+class GraphData(BaseModel):
+    nodes: List[Node]
+    edges: List[Edge]
 
-class GraphDataResponse(BaseModel):
-    nodes: list[GraphNode] = []
-    edges: list[GraphEdge] = []
+class RelatedPaperResponse(BaseModel):
+    papers: List[RelatedPaper]

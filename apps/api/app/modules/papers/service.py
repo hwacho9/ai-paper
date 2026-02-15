@@ -1,6 +1,8 @@
 """
 D-03: ペーパーライブラリ - サービス
 """
+import re
+
 from app.modules.papers.repository import PaperRepository
 from app.modules.papers.schemas import PaperCreate, PaperResponse, PaperListResponse
 
@@ -9,6 +11,14 @@ from fastapi import UploadFile
 class PaperService:
     def __init__(self):
         self.repository = PaperRepository()
+
+    def _is_likely_pdf_url(self, url: str | None) -> bool:
+        if not url:
+            return False
+        u = url.lower().strip()
+        if ".pdf" in u:
+            return True
+        return bool(re.search(r"(arxiv\.org\/pdf\/)", u))
 
     async def toggle_like(self, uid: str, paper_data: PaperCreate) -> bool:
         """
@@ -33,6 +43,9 @@ class PaperService:
         if is_liked:
             # Unlike
             await self.repository.remove_like(uid, paper_id)
+            # Invalidate Graph Cache
+            from app.modules.related.service import related_service
+            await related_service.invalidate_user_graph_cache(uid)
             return False
         else:
             # Like
@@ -45,12 +58,16 @@ class PaperService:
             
             # Ingestion Trigger (Auto-Ingest)
             # URLがある場合のみトリガー
-            if paper_data.pdf_url:
+            if self._is_likely_pdf_url(paper_data.pdf_url):
                 from app.core.cloud_run import execute_ingest_job
                 import uuid
                 request_id = f"auto-{uuid.uuid4()}"
                 await execute_ingest_job(paper["id"], uid, request_id, pdf_url=paper.get("pdf_url"))
             
+            # Invalidate Graph Cache
+            from app.modules.related.service import related_service
+            await related_service.invalidate_user_graph_cache(uid)
+
             return True
 
     async def get_user_library(self, uid: str) -> PaperListResponse:
