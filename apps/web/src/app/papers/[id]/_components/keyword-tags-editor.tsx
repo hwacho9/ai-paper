@@ -63,11 +63,10 @@ export function KeywordTagsEditor({
     const normalizedLabel = keyword.label.trim().toLowerCase();
     const hasRelated = keywordRelatedStatusMap?.[normalizedLabel];
     const linkedStyle = isPrerequisite
-      ? "cursor-pointer border-amber-400/40 bg-amber-400/20 text-amber-200 hover:bg-amber-400/30"
-      : "cursor-pointer border-sky-400/40 bg-sky-400/20 text-sky-200 hover:bg-sky-400/30";
-    const unlinkedStyle = isPrerequisite
-      ? "cursor-pointer border-amber-300/20 bg-zinc-500/15 text-amber-100/80"
-      : "cursor-pointer border-sky-300/20 bg-zinc-500/15 text-sky-100/80";
+      ? "cursor-pointer border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-200 dark:border-amber-400/40 dark:bg-amber-400/20 dark:text-amber-200 dark:hover:bg-amber-400/30"
+      : "cursor-pointer border-sky-300 bg-sky-100 text-sky-800 hover:bg-sky-200 dark:border-sky-400/40 dark:bg-sky-400/20 dark:text-sky-200 dark:hover:bg-sky-400/30";
+    const unlinkedStyle =
+      "cursor-pointer border-dashed border-border bg-muted/40 text-muted-foreground hover:bg-muted/55 dark:bg-zinc-500/15 dark:text-zinc-300";
 
     const baseStyle = deleteMode
       ? "border-red-400/60 bg-red-500/15 text-red-300"

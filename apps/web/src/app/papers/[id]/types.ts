@@ -17,3 +17,8 @@ export interface Paper {
   created_at: string | null;
   updated_at: string | null;
 }
+
+export interface ProjectSummary {
+  id: string;
+  title: string;
+}

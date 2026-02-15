@@ -7,7 +7,7 @@
 
 import { use, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiGet } from "@/lib/api/client";
+import { apiDelete, apiGet, apiPost } from "@/lib/api/client";
 import {
     getMemos,
     createMemo,
@@ -30,7 +30,16 @@ import { OverviewPanel } from "./_components/overview-panel";
 import { PdfPanel } from "./_components/pdf-panel";
 import { RelatedPanel } from "./_components/related-panel";
 import { useKeywordRelatedStatus } from "./_components/use-keyword-related-status";
-import type { Paper, Tab } from "./types";
+import type { Paper, ProjectSummary, Tab } from "./types";
+
+interface ProjectListResponse {
+    projects: Array<ProjectSummary & { paper_count: number }>;
+    total: number;
+}
+
+interface ProjectPaperResponse {
+    paper_id: string;
+}
 
 export default function PaperDetailPage({
     params,
@@ -118,10 +127,12 @@ export default function PaperDetailPage({
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const pollingCountRef = useRef(0);
     const [keywordsError, setKeywordsError] = useState<string | null>(null);
-    const {
-        statusMap: keywordRelatedStatusMap,
-        loading: keywordRelatedStatusLoading,
-    } = useKeywordRelatedStatus(paperId, paperKeywords, keywordsLoading);
+    const { statusMap: keywordRelatedStatusMap, loading: keywordRelatedStatusLoading } =
+        useKeywordRelatedStatus(id, paperKeywords, keywordsLoading);
+    const [projects, setProjects] = useState<ProjectSummary[]>([]);
+    const [linkedProjectIds, setLinkedProjectIds] = useState<string[]>([]);
+    const [projectsLoading, setProjectsLoading] = useState(true);
+    const [projectsError, setProjectsError] = useState<string | null>(null);
 
     useEffect(() => {
         const nextTab = resolveTab();
@@ -207,6 +218,48 @@ export default function PaperDetailPage({
         }
     }, [paperId]);
 
+    const fetchProjectMembership = useCallback(async () => {
+        setProjectsLoading(true);
+        try {
+            setProjectsError(null);
+            const data = await apiGet<ProjectListResponse>("/api/v1/projects");
+            const projectList: ProjectSummary[] = data.projects.map((project) => ({
+                id: project.id,
+                title: project.title,
+            }));
+            setProjects(projectList);
+
+            const linkedIds = await Promise.all(
+                projectList.map(async (project) => {
+                    try {
+                        const papers = await apiGet<ProjectPaperResponse[]>(
+                            `/api/v1/projects/${project.id}/papers`,
+                        );
+                        return papers.some((entry) => entry.paper_id === id)
+                            ? project.id
+                            : null;
+                    } catch {
+                        return null;
+                    }
+                }),
+            );
+
+            setLinkedProjectIds(
+                linkedIds.filter((projectId): projectId is string =>
+                    typeof projectId === "string",
+                ),
+            );
+        } catch (e: unknown) {
+            setProjectsError(
+                e instanceof Error
+                    ? e.message
+                    : "所属プロジェクトの取得に失敗しました",
+            );
+        } finally {
+            setProjectsLoading(false);
+        }
+    }, [id]);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -225,14 +278,9 @@ export default function PaperDetailPage({
             } else {
                 setKeywordsLoading(false);
             }
-        };
-
-        init();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [fetchPaper, fetchMemo, fetchPaperKeywords, keywordsAccessBlocked]);
+        });
+        fetchProjectMembership();
+    }, [fetchPaper, fetchMemo, fetchPaperKeywords, fetchProjectMembership]);
 
     // キーワードが0件の場合、ポーリングで生成完了を待つ
     useEffect(() => {
@@ -389,6 +437,41 @@ export default function PaperDetailPage({
         setActiveTab("related");
     };
 
+    const handleAddProject = async (projectId: string) => {
+        if (linkedProjectIds.includes(projectId)) return;
+        try {
+            await apiPost(`/api/v1/projects/${projectId}/papers`, {
+                paper_id: id,
+                role: "reference",
+                note: "",
+            });
+            setLinkedProjectIds((prev) => [...prev, projectId]);
+        } catch (e: unknown) {
+            alert(
+                e instanceof Error
+                    ? e.message
+                    : "プロジェクトへの追加に失敗しました",
+            );
+            throw e;
+        }
+    };
+
+    const handleDeleteProject = async (projectId: string) => {
+        try {
+            await apiDelete(`/api/v1/projects/${projectId}/papers/${id}`);
+            setLinkedProjectIds((prev) =>
+                prev.filter((linkedId) => linkedId !== projectId),
+            );
+        } catch (e: unknown) {
+            alert(
+                e instanceof Error
+                    ? e.message
+                    : "プロジェクトからの削除に失敗しました",
+            );
+            throw e;
+        }
+    };
+
     if (loading) {
         return (
             <div className="space-y-6 animate-pulse">
@@ -442,6 +525,12 @@ export default function PaperDetailPage({
                 onKeywordClick={handleKeywordClick}
                 keywordRelatedStatusMap={keywordRelatedStatusMap}
                 keywordRelatedStatusLoading={keywordRelatedStatusLoading}
+                projects={projects}
+                linkedProjectIds={linkedProjectIds}
+                projectsLoading={projectsLoading}
+                projectsError={projectsError}
+                onAddProject={handleAddProject}
+                onDeleteProject={handleDeleteProject}
             />
 
             <PaperTabs activeTab={activeTab} onChange={setActiveTab} />

@@ -124,6 +124,19 @@ async def get_project_tex_file(
     )
 
 
+@router.get("/projects/{project_id}/tex/file/raw")
+async def get_project_tex_file_raw(
+    project_id: str,
+    path: str = Query(..., min_length=1),
+    current_user: dict = Depends(get_current_user),
+):
+    """TeXワークスペース内ファイルをバイナリで返す（画像プレビュー等）"""
+    data = await project_service.get_tex_file_binary(
+        project_id, current_user["uid"], path
+    )
+    return Response(content=data["data"], media_type=data["content_type"])
+
+
 @router.post("/projects/{project_id}/tex/file", status_code=204)
 async def save_project_tex_file(
     project_id: str,

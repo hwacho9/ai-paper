@@ -1,6 +1,7 @@
 import type { PaperKeywordResponse } from "@/lib/api";
-import type { Paper } from "../types";
+import type { Paper, ProjectSummary } from "../types";
 import { KeywordTagsEditor } from "./keyword-tags-editor";
+import { ProjectTagsEditor } from "./project-tags-editor";
 import type { KeywordRelatedStatusMap } from "./use-keyword-related-status";
 
 interface PaperHeaderProps {
@@ -13,6 +14,12 @@ interface PaperHeaderProps {
   onKeywordClick?: (label: string) => void;
   keywordRelatedStatusMap?: KeywordRelatedStatusMap;
   keywordRelatedStatusLoading?: boolean;
+  projects: ProjectSummary[];
+  linkedProjectIds: string[];
+  projectsLoading: boolean;
+  projectsError: string | null;
+  onAddProject: (projectId: string) => Promise<void>;
+  onDeleteProject: (projectId: string) => Promise<void>;
 }
 
 const statusColors: Record<"READY" | "PROCESSING" | "FAILED", string> = {
@@ -64,6 +71,12 @@ export function PaperHeader({
   onKeywordClick,
   keywordRelatedStatusMap,
   keywordRelatedStatusLoading,
+  projects,
+  linkedProjectIds,
+  projectsLoading,
+  projectsError,
+  onAddProject,
+  onDeleteProject,
 }: PaperHeaderProps) {
   const displayStatus = getDisplayStatus(paper, keywords);
 
@@ -117,6 +130,14 @@ export function PaperHeader({
         onKeywordClick={onKeywordClick}
         keywordRelatedStatusMap={keywordRelatedStatusMap}
         keywordRelatedStatusLoading={keywordRelatedStatusLoading}
+      />
+      <ProjectTagsEditor
+        projects={projects}
+        linkedProjectIds={linkedProjectIds}
+        loading={projectsLoading}
+        error={projectsError}
+        onAddProject={onAddProject}
+        onDeleteProject={onDeleteProject}
       />
     </div>
   );
