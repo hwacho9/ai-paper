@@ -810,6 +810,36 @@ export default function ProjectDetailPage({
         return hits;
     }, [docSearchQuery, latexContent]);
 
+    const japaneseTextMatches = useMemo(() => {
+        const hits: Array<{
+            start: number;
+            end: number;
+            preview: string;
+            line: number;
+        }> = [];
+        const regex =
+            /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]+/g;
+        for (const match of latexContent.matchAll(regex)) {
+            const text = match[0] || "";
+            const start = match.index ?? -1;
+            if (start < 0) continue;
+            const end = start + text.length;
+            const previewStart = Math.max(0, start - 20);
+            const previewEnd = Math.min(latexContent.length, end + 20);
+            const line = latexContent.slice(0, start).split("\n").length;
+            hits.push({
+                start,
+                end,
+                line,
+                preview: latexContent
+                    .slice(previewStart, previewEnd)
+                    .replace(/\n/g, " "),
+            });
+            if (hits.length >= 30) break;
+        }
+        return hits;
+    }, [latexContent]);
+
     const bibtexText = useMemo(() => {
         if (papers.length === 0) return "論文がありません";
         return papers
@@ -1130,6 +1160,26 @@ export default function ProjectDetailPage({
                                 </button>
                             </div>
                         </div>
+                        {japaneseTextMatches.length > 0 && (
+                            <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
+                                <div className="mb-1.5 text-xs font-medium text-amber-300">
+                                    日本語を検出しました（{japaneseTextMatches.length}
+                                    箇所）。LaTeXコンパイルのため英語にしてください。
+                                </div>
+                                <div className="max-h-28 space-y-1 overflow-auto pr-1">
+                                    {japaneseTextMatches.map((m, idx) => (
+                                        <button
+                                            key={`${m.start}-${idx}`}
+                                            onClick={() =>
+                                                focusEditorRange(m.start, m.end)
+                                            }
+                                            className="w-full rounded-md border border-amber-500/20 bg-amber-500/5 px-2 py-1 text-left text-[11px] text-amber-100 hover:border-amber-400/40">
+                                            L{m.line}: {m.preview}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                         {isTextTexFile(selectedTexPath) ? (
                             <textarea
                                 ref={latexEditorRef}
@@ -1138,7 +1188,11 @@ export default function ProjectDetailPage({
                                     setLatexContent(e.target.value)
                                 }
                                 spellCheck={false}
-                                className="h-[560px] w-full resize-y rounded-lg border border-border bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                className={`h-[560px] w-full resize-y rounded-lg border bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:ring-2 ${
+                                    japaneseTextMatches.length > 0
+                                        ? "border-amber-500/50 focus:border-amber-400 focus:ring-amber-500/25"
+                                        : "border-border focus:border-primary focus:ring-primary/20"
+                                }`}
                                 placeholder="ここにLaTeXを書いてください..."
                             />
                         ) : (
