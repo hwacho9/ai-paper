@@ -6,7 +6,7 @@
  * Canvas/SVGベースのネットワークビジュアライゼーション
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { GraphConnectionMode, relatedApi } from "@/lib/api/related";
 import { apiDelete, apiGet, apiPost } from "@/lib/api/client";
@@ -34,7 +34,15 @@ interface PaperTitleResponse {
     title: string;
 }
 
-export default function GraphPage() {
+export default function GraphPageWrapper() {
+    return (
+        <Suspense fallback={<div className="flex h-full items-center justify-center"><p>読み込み中...</p></div>}>
+            <GraphPage />
+        </Suspense>
+    );
+}
+
+function GraphPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const canvasRef = useRef<HTMLCanvasElement>(null);

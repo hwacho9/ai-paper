@@ -1593,16 +1593,7 @@ export default function ProjectDetailPage({
                                 <div className="text-center py-12 text-muted-foreground">
                                     <div className="text-4xl mb-3">📚</div>
                                     <p>プロジェクト内の文献はまだありません</p>
-                                    <button
-                                        onClick={() =>
-                                            void handleRemovePaper(meta.paperId)
-                                        }
-                                        disabled={removingPaperId === meta.paperId}
-                                        className="rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/20">
-                                        {removingPaperId === meta.paperId
-                                            ? "削除中..."
-                                            : "削除"}
-                                    </button>
+                                    <p className="mt-2 text-xs">上の「+ 文献を追加」ボタンから追加できます</p>
                                 </div>
                             )}
                             {paperMeta.map((meta) => {

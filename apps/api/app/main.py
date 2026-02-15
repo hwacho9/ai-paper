@@ -35,14 +35,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allow_origins_list,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-@app.get("/healthz", tags=["ヘルスチェック"])
-async def healthz():
+@app.get("/health", tags=["ヘルスチェック"])
+async def health():
     """ヘルスチェックエンドポイント（認証不要）"""
     return {"status": "ok"}
 

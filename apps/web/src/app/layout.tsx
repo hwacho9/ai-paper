@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { AppSidebar } from "@/components/layout/app-sidebar";
@@ -41,7 +42,9 @@ export default function RootLayout({
                             </div>
                         </div>
                         <AgentChatWidget />
-                        <AnalyticsProvider />
+                        <Suspense fallback={null}>
+                            <AnalyticsProvider />
+                        </Suspense>
                     </AuthProvider>
                 </ThemeProvider>
             </body>

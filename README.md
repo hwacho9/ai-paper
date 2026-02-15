@@ -64,6 +64,18 @@ docker compose down
 ./scripts/deploy.sh api
 ./scripts/deploy.sh web
 ./scripts/deploy.sh worker
+
+# フロント/バックを公開運用したい場合:
+# 1) .env.deploy を作成して CORS_ALLOW_ORIGINS を設定
+cp .env.deploy.example .env.deploy
+
+# 2) サービスをデプロイ
+./scripts/deploy.sh api
+./scripts/deploy.sh web
+
+# 3) 出力されるURLを確認
+# API: gcloud run services describe api-service --region asia-northeast1 --format 'value(status.url)'
+# Web: gcloud run services describe web-service --region asia-northeast1 --format 'value(status.url)'
 ```
 
 > ⚠️ 事前に `.env.deploy.example` → `.env.deploy` をコピーして `GCP_PROJECT_ID` を設定してください。

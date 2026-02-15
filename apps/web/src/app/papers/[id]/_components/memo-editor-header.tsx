@@ -12,7 +12,7 @@ export function MemoEditorHeader({ memo, onDelete }: MemoEditorHeaderProps) {
         <h3 className="text-lg font-semibold">
           {memo ? "メモを編集" : "新しいメモを作成"}
         </h3>
-        {memo && (
+        {memo && memo.updated_at && (
           <span className="text-xs text-muted-foreground">
             最終更新: {new Date(memo.updated_at).toLocaleString("ja-JP")}
           </span>

@@ -5,7 +5,7 @@
  * データ取得・状態管理を担当し、表示はコンポーネントへ分離
  */
 
-import { use, useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { Suspense, use, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiDelete, apiGet, apiPost } from "@/lib/api/client";
 import {
@@ -41,7 +41,19 @@ interface ProjectPaperResponse {
     paper_id: string;
 }
 
-export default function PaperDetailPage({
+export default function PaperDetailPageWrapper({
+    params,
+}: {
+    params: Promise<{ id: string }>;
+}) {
+    return (
+        <Suspense fallback={<div className="flex h-full items-center justify-center"><p>読み込み中...</p></div>}>
+            <PaperDetailPage params={params} />
+        </Suspense>
+    );
+}
+
+function PaperDetailPage({
     params,
 }: {
     params: Promise<{ id: string }>;
