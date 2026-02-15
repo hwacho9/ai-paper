@@ -2,113 +2,128 @@
 
 ## ドメイン概要
 
-メモの作成/検索、論文/キーワード/チャンク単位での参照連結、引用根拠の記録を担当。
+ユーザーのメモ管理（CRUD）と、メモ参照情報（`refs`）の保持を担当するドメイン。
 
 ## 責務境界
 
-- メモのCRUD
-- メモを特定のPaper/Chunk/Keywordに連結
-- メモの検索（キーワード/論文ベース）
-- いいね保存時の自動メモ生成
+- メモの作成/一覧/詳細/更新/削除
+- メモに紐づく参照情報（paper/project/chunk/keyword）の保存
+- ユーザー単位のアクセス制御（`ownerUid`）
 
-## 機能一覧
+## 機能一覧（現行）
 
-| 機能ID | 機能名   | 説明                          |
-| ------ | -------- | ----------------------------- |
-| F-0801 | メモCRUD | 作成/読取/更新/削除           |
-| F-0802 | 参照連結 | Paper/Chunk/Keywordへの紐付け |
-| F-0803 | メモ検索 | キーワード/論文ベースの検索   |
+| 機能ID | 機能名 | 説明 |
+| ------ | ------ | ---- |
+| F-0801 | メモCRUD | 作成/読取/更新/削除 |
+| F-0802 | 参照連結 | `refs` サブコレクションで参照先を保持 |
+| F-0803 | 並び替え | 一覧を `updatedAt` 降順で返却 |
 
 ## 主要エンティティ
 
 ### Memo
 
-```
-memos/{memoId}
+`memos/{memoId}`
+
+```json
 {
   "id": "string",
   "ownerUid": "string",
   "title": "string",
   "body": "string",
-  "status": "draft" | "reviewed",
+  "status": "draft | reviewed | string",
+  "tags": ["string"],
   "createdAt": "timestamp",
   "updatedAt": "timestamp"
 }
 ```
 
-### MemoRef（メモ参照）
+### MemoRef
 
-```
-memos/{memoId}/refs/{refId}
+`memos/{memoId}/refs/{refType}_{refId}`
+
+```json
 {
   "memoId": "string",
-  "refType": "paper" | "project" | "chunk" | "keyword",
+  "refType": "paper | project | chunk | keyword",
   "refId": "string",
   "note": "string | null"
 }
 ```
 
-## API仕様
+補足:
+- `refs` はメモ本体とは別のサブコレクションで保存
+- 更新時に `refs` を指定した場合は、既存 `refs` を一旦全削除して再作成する
 
-| メソッド | パス                | 説明                       |
-| -------- | ------------------- | -------------------------- |
-| `POST`   | `/api/v1/memos`     | メモ作成                   |
-| `GET`    | `/api/v1/memos`     | メモ一覧（フィルター対応） |
-| `GET`    | `/api/v1/memos/:id` | メモ詳細                   |
-| `PATCH`  | `/api/v1/memos/:id` | メモ更新                   |
-| `DELETE` | `/api/v1/memos/:id` | メモ削除                   |
+## API仕様（現行）
 
-## スキーマ（Pydantic）
+| メソッド | パス | 説明 |
+| -------- | ---- | ---- |
+| `GET` | `/api/v1/memos` | メモ一覧 |
+| `POST` | `/api/v1/memos` | メモ作成 |
+| `GET` | `/api/v1/memos/{memo_id}` | メモ詳細 |
+| `PATCH` | `/api/v1/memos/{memo_id}` | メモ更新 |
+| `DELETE` | `/api/v1/memos/{memo_id}` | メモ削除 |
 
-```python
-class MemoCreate(BaseModel):
-    title: str = ""
-    body: str = ""
-    refs: list[MemoRefCreate] = []
+## スキーマ（実装）
 
-class MemoRefCreate(BaseModel):
-    ref_type: str  # "paper" | "project" | "chunk" | "keyword"
-    ref_id: str
-    note: str | None = None
+### `MemoCreate`
 
-class MemoResponse(BaseModel):
-    id: str
-    owner_uid: str
-    title: str
-    body: str
-    status: str
-    created_at: datetime
-    updated_at: datetime
-    refs: list[MemoRefResponse]
+```json
+{
+  "title": "string",
+  "body": "string",
+  "tags": ["string"],
+  "refs": [
+    {
+      "ref_type": "paper",
+      "ref_id": "string",
+      "note": "string"
+    }
+  ],
+  "status": "draft"
+}
 ```
 
-## フロントエンド
+### `MemoResponse`
 
-### ページ
-
-- `/memos` — メモ一覧（チェック/編集/整理）
-- `/papers/[id]` — 論文詳細内の関連メモ表示（D-03との連携）
-
-### コンポーネント
-
-- `MemoCard` — メモカード（一覧用、チェックボックス付き、タグ表示廃止）
-- `MemoEditor` — メモ編集器（リッチテキスト、関連キーワードを参照用に表示）
-  - 論文のタグ付きキーワード（📄 論文キーワード、📚 事前知識キーワード）を表示
-  - 参照連結機能（D-06キーワードとの連携）
-- `MemoRefBadge` — 参照先バッジ（論文/チャンク/キーワード）
-- `MemoEditorForm` — メモ編集フォーム（キーワード情報をコンテキストとして表示）
-
-## 自動メモ生成フロー
-
-1. ユーザーが論文にいいね → D-03が `POST /memos` を呼び出し
-2. タイトル: 論文タイトルのコピー
-3. ボディ: 要約テンプレート（後でユーザーが編集）
-4. 参照: `refType=paper`, `refId=paperId`
-
-## TODO一覧
-
-```python
-# TODO(F-0801): メモCRUD | AC: 作成/読取/更新/削除が動作 | owner:@
-# TODO(F-0802): 参照連結 | AC: メモとPaper/Chunk/Keywordの紐付け | owner:@
-# TODO(F-0803): メモ検索 | AC: キーワード/論文ベースのフィルタリング | owner:@
+```json
+{
+  "id": "string",
+  "owner_uid": "string",
+  "title": "string",
+  "body": "string",
+  "status": "draft",
+  "created_at": "timestamp",
+  "updated_at": "timestamp",
+  "tags": ["string"],
+  "refs": [
+    {
+      "ref_type": "paper",
+      "ref_id": "string",
+      "note": "string | null"
+    }
+  ]
+}
 ```
+
+## 実装挙動
+
+- 一覧は `ownerUid` でフィルタし、`updated_at` 降順で返す
+- 詳細/更新/削除は `ownerUid` 不一致時に 404 として扱う
+- `PATCH` は部分更新
+- `refs` 未指定で更新した場合は既存 `refs` を維持
+- `refs` を指定して更新した場合は全置換
+
+## 現状の注意点
+
+- APIレベルの検索フィルター（キーワード、paper_id など）は未実装
+  - 現状は `GET /api/v1/memos` で全件取得し、フロントで絞り込み
+- `MemoService.create_auto_memo(...)` は実装済みだが、現行フローでは自動呼び出しされていない
+
+## 実装ステータス
+
+- 実装済み: メモCRUD
+- 実装済み: 参照連結（`refs`）
+- 実装済み: `updatedAt` 降順一覧
+- 未実装: API側の条件検索（タグ/参照先によるサーバーフィルタ）
+- 未実装: いいね時の自動メモ生成フック

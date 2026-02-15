@@ -2,25 +2,26 @@
 
 ## ドメイン概要
 
-検索結果/論文詳細から「いいね（Like）」で保存した論文の管理を担当。メタデータ管理、PDF登録、状態管理を行う。
+検索結果から「いいね（Like）」で保存した論文の管理を担当するドメイン。  
+ライブラリ一覧/詳細、Like トグル、PDFアップロード、インジェスト起動を扱う。
 
 ## 責務境界
 
 - 検索結果からのいいね保存（メタデータ基本）
-- PDF アップロード/リンク登録
-- ライブラリ照会/ソート/フィルター
-- 論文状態管理（INGESTING / READY / FAILED）
-- いいね保存時のメモ自動生成
+- ライブラリ照会（一覧・詳細）
+- PDF アップロード（ファイル）
+- インジェスト起動（手動/自動）
+- いいね保存時のキーワード推薦連携（D-06）
 
 ## 機能一覧
 
-| 機能ID | 機能名         | 説明                                               |
-| ------ | -------------- | -------------------------------------------------- |
-| F-0301 | 論文保存       | メタデータベースで論文をライブラリに保存           |
-| F-0302 | PDF登録        | PDFファイルアップロードまたはURLリンク登録         |
-| F-0303 | ライブラリ照会 | 保存論文の一覧表示、ソート、フィルター             |
-| F-0304 | 論文詳細       | メタデータ、キーワード、メモ、関連論文の表示       |
-| F-0305 | メモ自動生成   | いいね保存時にメモを自動作成（Memoドメインと連携） |
+| 機能ID | 機能名         | 説明 |
+| ------ | -------------- | ---- |
+| F-0301 | Likeトグル保存 | Like状態の ON/OFF をトグルし、未登録論文は自動作成 |
+| F-0302 | PDFアップロード | PDF を受け取り、アップロード後にインジェスト開始 |
+| F-0303 | ライブラリ照会 | 保存論文の一覧・詳細を取得 |
+| F-0304 | インジェスト起動 | 手動起動、および PDF URL がある場合の自動起動 |
+| F-0305 | キーワード推薦連携 | 新規 Like 時にキーワード推薦を実行（D-06） |
 
 ## 主要エンティティ
 
@@ -38,7 +39,8 @@ papers/{paperId}
   "arxivId": "string | null",
   "abstract": "string",
   "pdfUrl": "string | null",
-  "pdfGcsPath": "string | null",
+  "keywords": ["string"],
+  "prerequisiteKeywords": ["string"],
   "status": "PENDING" | "INGESTING" | "READY" | "FAILED",
   "createdAt": "timestamp",
   "updatedAt": "timestamp"
@@ -51,58 +53,66 @@ papers/{paperId}
 users/{uid}/likes/{paperId}
 {
   "paperId": "string",
-  "ownerUid": "string",
   "createdAt": "timestamp"
 }
 ```
 
 ## API仕様
 
-| メソッド | パス                      | 説明                     |
-| -------- | ------------------------- | ------------------------ |
-| `POST`   | `/api/v1/papers`          | 論文保存（メタデータ）   |
-| `POST`   | `/api/v1/papers/:id/pdf`  | PDF アップロード/URL登録 |
-| `GET`    | `/api/v1/papers`          | ライブラリ一覧           |
-| `GET`    | `/api/v1/papers/:id`      | 論文詳細                 |
-| `PATCH`  | `/api/v1/papers/:id`      | 論文メタ更新             |
-| `DELETE` | `/api/v1/papers/:id`      | 論文削除                 |
-| `POST`   | `/api/v1/papers/:id/like` | いいね保存               |
-| `DELETE` | `/api/v1/papers/:id/like` | いいね解除               |
+| メソッド | パス                             | 説明 |
+| -------- | -------------------------------- | ---- |
+| `GET`    | `/api/v1/library`               | ライブラリ一覧 |
+| `GET`    | `/api/v1/library/{paper_id}`    | 論文詳細 |
+| `POST`   | `/api/v1/library/{paper_id}/like` | Likeトグル（保存/解除） |
+| `POST`   | `/api/v1/library/{paper_id}/ingest` | 手動インジェスト起動 |
+| `POST`   | `/api/v1/library/{paper_id}/upload` | PDFアップロード + インジェスト起動 |
 
 ## スキーマ（Pydantic）
 
 ```python
 class PaperCreate(BaseModel):
+    external_id: str
+    source: str = "semantic_scholar"
     title: str
     authors: list[str] = []
     year: int | None = None
     venue: str = ""
+    abstract: str = ""
     doi: str | None = None
     arxiv_id: str | None = None
-    abstract: str = ""
+    pdf_url: str | None = None
+    url: str | None = None
+    keywords: list[str] = []
+    prerequisite_keywords: list[str] = []
 
 class PaperResponse(BaseModel):
     id: str
+    owner_uid: str | None = None
     title: str
     authors: list[str]
     year: int | None
     venue: str
+    abstract: str
     doi: str | None
     arxiv_id: str | None
-    abstract: str
     pdf_url: str | None
-    status: str
-    is_liked: bool
-    created_at: datetime
+    url: str | None = None
+    status: str = "PENDING"
+    is_liked: bool = False
+    keywords: list[str] = []
+    prerequisite_keywords: list[str] = []
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-class PaperPdfUpload(BaseModel):
-    pdf_url: str | None = None  # URL登録の場合
-    # ファイルアップロードはmultipart/form-data
+class PaperListResponse(BaseModel):
+    papers: list[PaperResponse]
+    total: int
 ```
 
 ## 非同期連携
 
-- PDFが登録されたら `paper.ingest.requested` イベントを発行 → D-05パイプライン実行
+- Like時: `pdf_url` が PDF と判定できる場合、自動でインジェストJobを実行
+- Upload時: Storageへアップロード後、手動インジェスト起動と同等の処理を実行
 
 ## フロントエンド
 
@@ -113,23 +123,19 @@ class PaperPdfUpload(BaseModel):
 
 ### コンポーネント
 
-- `PaperCard` — 論文カード（リストアイテム）
-- `PaperDetail` — 論文詳細情報
-- `LikeButton` — いいねトグルボタン（❤️）
-- `LibraryList` — ライブラリリスト
-- `LibraryFilters` — フィルター/ソートUI
-- `StatusBadge` — 論文状態バッジ（PENDING/INGESTING/READY/FAILED）
-- `KeywordTagsEditor` — キーワード編集コンポーネント（D-06との連携）
-  - 📄 論文キーワード セクション（sky色）
-  - 📚 事前知識キーワード セクション（amber色）
-  - 各セクションに追加ボタン + 削除モード実装
+- `/library` ページ内で Like解除、ソート/フィルター、RAG質問を実装
+- `PdfUploadButton` — PDFアップロードとインジェスト起動のトリガー
+- `/papers/[id]` では `/api/v1/library/{paper_id}` を使って詳細取得
 
-## TODO一覧
+## 実装ステータス
 
-```python
-# TODO(F-0301): 論文保存API | AC: ownerUid検証、重複防止 | owner:@
-# TODO(F-0302): PDF登録 | AC: GCSアップロード、Pub/Sub発行 | owner:@
-# TODO(F-0303): ライブラリ照会 | AC: ソート/フィルター/ページネーション | owner:@
-# TODO(F-0304): 論文詳細 | AC: メタ+状態+関連情報表示 | owner:@
-# TODO(F-0305): メモ自動生成 | AC: いいね時にメモ自動作成 | owner:@
-```
+- 実装済み: Likeトグル（未登録時の論文自動作成含む）
+- 実装済み: ライブラリ一覧・詳細取得
+- 実装済み: PDFアップロード + インジェスト起動
+- 実装済み: 新規Like時のキーワード推薦連携
+- 未実装: `POST/PATCH/DELETE /api/v1/papers...` 系の汎用CRUD API
+- 未実装: いいね保存時のメモ自動生成
+
+## 備考
+
+- D-03 のバックエンドルーターは `/api/v1/library` 配下で公開される
