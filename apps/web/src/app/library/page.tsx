@@ -279,11 +279,7 @@ export default function LibraryPage() {
       setAskAnswer(result.answer);
       setAskConfidence(result.confidence);
       setCitations(result.citations ?? []);
-      const nextExpanded: Record<string, boolean> = {};
-      for (const item of result.citations ?? []) {
-        nextExpanded[item.paper_id] = true;
-      }
-      setExpandedPapers(nextExpanded);
+      setExpandedPapers({});
       toast.success("質問への回答を取得しました");
     } catch (err) {
       console.error(err);
@@ -349,7 +345,23 @@ export default function LibraryPage() {
             {papers.length} 論文
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* ステータスフィルター */}
+          <div className="flex rounded-lg border border-border bg-muted/30 p-0.5">
+            {["すべて", "完了", "処理中", "失敗"].map((f) => (
+              <button
+                key={f}
+                onClick={() => setSelectedFilter(f)}
+                className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-all ${
+                  selectedFilter === f
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
           {/* ソート */}
           <select
             value={sortMode}
@@ -408,23 +420,6 @@ export default function LibraryPage() {
             </button>
           </div>
         </div>
-      </div>
-
-      {/* フィルターバー */}
-      <div className="flex flex-wrap gap-2">
-        {["すべて", "完了", "処理中", "失敗"].map((f) => (
-          <button
-            key={f}
-            onClick={() => setSelectedFilter(f)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              selectedFilter === f
-                ? "bg-primary/20 text-primary"
-                : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
       </div>
 
       {/* ライブラリQ&A */}
