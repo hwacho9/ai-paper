@@ -66,11 +66,14 @@ type ViewState =
       existingMemo: MemoResponse | null;
     };
 
+type MemoOriginFilter = "all" | "paper" | "project";
+
 export default function MemosPage() {
   const [memos, setMemos] = useState<MemoResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [originFilter, setOriginFilter] = useState<MemoOriginFilter>("all");
 
   // ビュー状態
   const [view, setView] = useState<ViewState>({ mode: "list" });
@@ -299,6 +302,12 @@ export default function MemosPage() {
 
   /* ---- フィルタ ---- */
   const filtered = memos.filter((m) => {
+    const hasPaperRef = m.refs.some((r) => r.ref_type === "paper");
+    const hasProjectRef = m.refs.some((r) => r.ref_type === "project");
+
+    if (originFilter === "paper" && !hasPaperRef) return false;
+    if (originFilter === "project" && !hasProjectRef) return false;
+
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -739,6 +748,27 @@ export default function MemosPage() {
           placeholder="メモを検索..."
           className="w-full rounded-lg border border-border bg-card py-2 pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
         />
+      </div>
+
+      {/* 絞り込み */}
+      <div className="flex items-center gap-2">
+        {[
+          { key: "all" as const, label: "ALL" },
+          { key: "paper" as const, label: "論文由来" },
+          { key: "project" as const, label: "プロジェクト由来" },
+        ].map((item) => (
+          <button
+            key={item.key}
+            onClick={() => setOriginFilter(item.key)}
+            className={`rounded-full border px-3 py-1 text-xs transition-colors ${
+              originFilter === item.key
+                ? "border-primary/50 bg-primary/15 text-primary"
+                : "border-border bg-card text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
 
       {/* 空状態 */}
