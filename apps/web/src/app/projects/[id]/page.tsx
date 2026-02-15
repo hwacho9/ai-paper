@@ -166,6 +166,10 @@ export default function ProjectDetailPage({
     const latexEditorRef = useRef<HTMLTextAreaElement>(null);
     const texFileInputRef = useRef<HTMLInputElement>(null);
     const pdfObjectUrlRef = useRef<string | null>(null);
+    const imageObjectUrlRef = useRef<string | null>(null);
+    const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+    const [imagePreviewLoading, setImagePreviewLoading] = useState(false);
+    const [imagePreviewError, setImagePreviewError] = useState<string | null>(null);
 
     const fetchProject = useCallback(async () => {
         try {
@@ -478,9 +482,14 @@ export default function ProjectDetailPage({
         }
         setSelectedTexPath(path);
         if (isTextTexFile(path)) {
+            clearImagePreview();
             await loadTexFileContent(path);
+        } else if (isImageTexFile(path)) {
+            setLatexContent("");
+            await loadImagePreview(path);
         } else {
             setLatexContent("");
+            clearImagePreview();
         }
     };
 
@@ -560,8 +569,24 @@ export default function ProjectDetailPage({
         );
     });
 
-    const isTextTexFile = (path: string) =>
-        /\.(tex|bib|sty|cls|bst|txt)$/i.test(path);
+    const isTextTexFile = useCallback(
+        (path: string) => /\.(tex|bib|sty|cls|bst|txt)$/i.test(path),
+        [],
+    );
+    const isImageTexFile = useCallback(
+        (path: string) => /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(path),
+        [],
+    );
+
+    const clearImagePreview = useCallback(() => {
+        if (imageObjectUrlRef.current) {
+            URL.revokeObjectURL(imageObjectUrlRef.current);
+            imageObjectUrlRef.current = null;
+        }
+        setImagePreviewUrl(null);
+        setImagePreviewError(null);
+        setImagePreviewLoading(false);
+    }, []);
 
     const fetchTexFiles = useCallback(async () => {
         setTexLoading(true);
@@ -616,7 +641,52 @@ export default function ProjectDetailPage({
             setLatexContent(data.content);
             return data.content;
         },
-        [id],
+        [id, isTextTexFile],
+    );
+
+    const loadImagePreview = useCallback(
+        async (path: string) => {
+            if (!isImageTexFile(path)) {
+                clearImagePreview();
+                return;
+            }
+            setImagePreviewLoading(true);
+            setImagePreviewError(null);
+            try {
+                const token = await getCurrentAuthToken();
+                if (!token) {
+                    throw new Error("認証情報が取得できません。");
+                }
+                const res = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/projects/${id}/tex/file/raw?path=${encodeURIComponent(path)}`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    },
+                );
+                if (!res.ok) {
+                    throw new Error("画像プレビューの取得に失敗しました。");
+                }
+                const blob = await res.blob();
+                if (imageObjectUrlRef.current) {
+                    URL.revokeObjectURL(imageObjectUrlRef.current);
+                }
+                const objectUrl = URL.createObjectURL(blob);
+                imageObjectUrlRef.current = objectUrl;
+                setImagePreviewUrl(objectUrl);
+            } catch (e: unknown) {
+                setImagePreviewUrl(null);
+                setImagePreviewError(
+                    e instanceof Error
+                        ? e.message
+                        : "画像プレビューの取得に失敗しました。",
+                );
+            } finally {
+                setImagePreviewLoading(false);
+            }
+        },
+        [clearImagePreview, id, isImageTexFile],
     );
 
     const jumpToPaperInMainTex = useCallback(
@@ -660,7 +730,7 @@ export default function ProjectDetailPage({
         } finally {
             setTexSaving(false);
         }
-    }, [fetchTexFiles, id, latexContent, selectedTexPath]);
+    }, [fetchTexFiles, id, isTextTexFile, latexContent, selectedTexPath]);
 
     const fetchTexPreview = useCallback(async () => {
         const data = await apiGet<TexCompileResponse>(
@@ -706,6 +776,9 @@ export default function ProjectDetailPage({
             if (pdfObjectUrlRef.current) {
                 URL.revokeObjectURL(pdfObjectUrlRef.current);
             }
+            if (imageObjectUrlRef.current) {
+                URL.revokeObjectURL(imageObjectUrlRef.current);
+            }
         };
     }, []);
 
@@ -713,13 +786,24 @@ export default function ProjectDetailPage({
         if (activeTab !== "latex") return;
 
         fetchTexFiles().then(() => {
-            void loadTexFileContent(selectedTexPath);
+            if (isTextTexFile(selectedTexPath)) {
+                clearImagePreview();
+                void loadTexFileContent(selectedTexPath);
+            } else if (isImageTexFile(selectedTexPath)) {
+                void loadImagePreview(selectedTexPath);
+            } else {
+                clearImagePreview();
+            }
             void fetchTexPreview();
         });
     }, [
         activeTab,
+        clearImagePreview,
         fetchTexFiles,
         fetchTexPreview,
+        isImageTexFile,
+        isTextTexFile,
+        loadImagePreview,
         loadTexFileContent,
         selectedTexPath,
     ]);
@@ -1195,6 +1279,25 @@ export default function ProjectDetailPage({
                                 }`}
                                 placeholder="ここにLaTeXを書いてください..."
                             />
+                        ) : isImageTexFile(selectedTexPath) ? (
+                            <div className="h-[560px] rounded-lg border border-border bg-muted/10 p-3">
+                                {imagePreviewLoading ? (
+                                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                                        画像を読み込み中...
+                                    </div>
+                                ) : imagePreviewUrl ? (
+                                    <img
+                                        src={imagePreviewUrl}
+                                        alt={selectedTexPath}
+                                        className="h-full w-full rounded-md object-contain"
+                                    />
+                                ) : (
+                                    <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                                        {imagePreviewError ||
+                                            "画像プレビューを表示できません。"}
+                                    </div>
+                                )}
+                            </div>
                         ) : (
                             <div className="h-[560px] rounded-lg border border-border bg-muted/10 p-4 text-sm text-muted-foreground">
                                 このファイル形式はエディタ表示対象外です。

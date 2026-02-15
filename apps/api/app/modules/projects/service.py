@@ -411,6 +411,29 @@ class ProjectService:
             raise HTTPException(status_code=400, detail="テキストファイルではありません。")
         return {"path": path, "content": content}
 
+    async def get_tex_file_binary(
+        self, project_id: str, owner_uid: str, path: str
+    ) -> dict:
+        """TeXワークスペース内ファイルのバイナリを取得"""
+        project = await self.repository.get_by_id(project_id, owner_uid)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="プロジェクトが見つかりません。",
+            )
+        if not path or ".." in path:
+            raise HTTPException(status_code=400, detail="Invalid file path")
+
+        blob_name = f"{self._project_tex_prefix(owner_uid, project_id)}{path}"
+        bucket = self._bucket()
+        blob = bucket.blob(blob_name)
+        if not blob.exists():
+            raise HTTPException(status_code=404, detail="ファイルが見つかりません。")
+
+        data = blob.download_as_bytes()
+        media_type = blob.content_type or "application/octet-stream"
+        return {"path": path, "data": data, "content_type": media_type}
+
     async def save_tex_file_content(
         self, project_id: str, owner_uid: str, path: str, content: str
     ) -> dict:
