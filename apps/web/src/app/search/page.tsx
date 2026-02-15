@@ -127,6 +127,9 @@ export default function SearchPage() {
   const [showOrganizedSwitch, setShowOrganizedSwitch] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [stateHydrated, setStateHydrated] = useState(false);
+  const [likeOverrides, setLikeOverrides] = useState<Record<string, boolean>>(
+    {},
+  );
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const organizedSwitchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -245,6 +248,12 @@ export default function SearchPage() {
     };
   };
 
+  const resolveLikedState = (paper: SearchResultItem): boolean => {
+    const override = likeOverrides[paper.external_id];
+    if (typeof override === "boolean") return override;
+    return Boolean(paper.is_in_library);
+  };
+
   const relationDescription = (item: ClusterPaperItem): string => {
     if (item.relation_type && item.relation_note) {
       return `${item.relation_type}: ${item.relation_note}`;
@@ -312,6 +321,7 @@ export default function SearchPage() {
     setOrganizedClusters([]);
     setOrganizedFallbackUsed(false);
     setShowOrganizedSwitch(false);
+    setLikeOverrides({});
     if (organizedSwitchTimerRef.current) {
       clearTimeout(organizedSwitchTimerRef.current);
       organizedSwitchTimerRef.current = null;
@@ -349,13 +359,16 @@ export default function SearchPage() {
       return;
     }
 
-    // 楽観的UI更新
-    const originalResults = [...results];
-    setResults(
-      results.map((p) =>
-        p.external_id === paper.external_id
-          ? { ...p, is_in_library: !p.is_in_library }
-          : p,
+    const paperId = paper.external_id;
+    const previousOverride = likeOverrides[paperId];
+    const currentLiked = resolveLikedState(paper);
+    const optimisticLiked = !currentLiked;
+
+    // 楽観的UI更新（list結果 + organized表示の双方）
+    setLikeOverrides((current) => ({ ...current, [paperId]: optimisticLiked }));
+    setResults((current) =>
+      current.map((p) =>
+        p.external_id === paperId ? { ...p, is_in_library: optimisticLiked } : p,
       ),
     );
 
@@ -373,14 +386,13 @@ export default function SearchPage() {
         pdf_url: paper.pdf_url,
       };
 
-      const isLiked = await toggleLike(paper.external_id, paperData);
+      const isLiked = await toggleLike(paperId, paperData);
 
       // サーバーの結果で確定
+      setLikeOverrides((current) => ({ ...current, [paperId]: isLiked }));
       setResults((current) =>
         current.map((p) =>
-          p.external_id === paper.external_id
-            ? { ...p, is_in_library: isLiked }
-            : p,
+          p.external_id === paperId ? { ...p, is_in_library: isLiked } : p,
         ),
       );
 
@@ -390,7 +402,20 @@ export default function SearchPage() {
     } catch (err) {
       console.error(err);
       toast.error("操作に失敗しました");
-      setResults(originalResults); // ロールバック
+      setLikeOverrides((current) => {
+        const next = { ...current };
+        if (typeof previousOverride === "boolean") {
+          next[paperId] = previousOverride;
+        } else {
+          delete next[paperId];
+        }
+        return next;
+      });
+      setResults((current) =>
+        current.map((p) =>
+          p.external_id === paperId ? { ...p, is_in_library: currentLiked } : p,
+        ),
+      );
     }
   };
 
@@ -641,21 +666,26 @@ export default function SearchPage() {
                       </div>
                     </div>
                     <div className="flex flex-col items-center gap-2">
+                      {(() => {
+                        const isLiked = resolveLikedState(paper);
+                        return (
                       <button
                         onClick={() => handleLike(paper)}
                         className={`rounded-lg p-2 transition-all hover:scale-110 ${
-                          paper.is_in_library
+                          isLiked
                             ? "bg-primary/20 text-primary"
                             : "bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary"
                         }`}
                         title={
-                          paper.is_in_library
+                          isLiked
                             ? "ライブラリに追加済み"
                             : "ライブラリに追加"
                         }
                       >
-                        {paper.is_in_library ? "❤️" : "🤍"}
+                        {isLiked ? "❤️" : "🤍"}
                       </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -696,21 +726,23 @@ export default function SearchPage() {
                         <p className="text-sm font-semibold">
                           {cluster.hub_paper.title}
                         </p>
+                        {(() => {
+                          const hubPaper = resolveClusterPaper(cluster.hub_paper);
+                          const isLiked = resolveLikedState(hubPaper);
+                          return (
                         <button
                           type="button"
-                          onClick={() =>
-                            handleLike(resolveClusterPaper(cluster.hub_paper))
-                          }
+                          onClick={() => handleLike(hubPaper)}
                           className={`mt-2 rounded-md px-2 py-1 text-xs ${
-                            resolveClusterPaper(cluster.hub_paper).is_in_library
+                            isLiked
                               ? "bg-primary/20 text-primary"
                               : "bg-muted text-muted-foreground"
                           }`}
                         >
-                          {resolveClusterPaper(cluster.hub_paper).is_in_library
-                            ? "❤️ 保存済み"
-                            : "🤍 保存"}
+                          {isLiked ? "❤️ 保存済み" : "🤍 保存"}
                         </button>
+                          );
+                        })()}
                       </div>
 
                       {cluster.children.length > 0 && (
@@ -739,12 +771,12 @@ export default function SearchPage() {
                                       type="button"
                                       onClick={() => handleLike(paper)}
                                       className={`rounded-md px-2 py-1 text-xs ${
-                                        paper.is_in_library
+                                        resolveLikedState(paper)
                                           ? "bg-primary/20 text-primary"
                                           : "bg-muted text-muted-foreground"
                                       }`}
                                     >
-                                      {paper.is_in_library
+                                      {resolveLikedState(paper)
                                         ? "❤️ 保存済み"
                                         : "🤍 保存"}
                                     </button>
@@ -782,12 +814,12 @@ export default function SearchPage() {
                                       type="button"
                                       onClick={() => handleLike(paper)}
                                       className={`rounded-md px-2 py-1 text-xs ${
-                                        paper.is_in_library
+                                        resolveLikedState(paper)
                                           ? "bg-primary/20 text-primary"
                                           : "bg-muted text-muted-foreground"
                                       }`}
                                     >
-                                      {paper.is_in_library
+                                      {resolveLikedState(paper)
                                         ? "❤️ 保存済み"
                                         : "🤍 保存"}
                                     </button>
