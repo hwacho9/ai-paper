@@ -1,13 +1,16 @@
 from app.core.search.base import BaseSearchClient, SearchResult
+from app.core.search.rate_limiter import FirestoreRateLimiter
 from scholarly import scholarly
 import asyncio
 from functools import partial
 
 class ScholarClient(BaseSearchClient):
-    def __init__(self):
+    SERVICE_KEY = "scholar"
+
+    def __init__(self, rate_limiter: FirestoreRateLimiter = None):
         # Google Scholar is very strict. We use a conservative 2.0s interval 
         # to avoid immediate scraping bans, although scholarly might handle some of it.
-        super().__init__(interval=2.0)
+        super().__init__(interval=2.0, rate_limiter=rate_limiter)
 
     async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
         await self._wait_for_rate_limit()

@@ -19,13 +19,16 @@ from app.core.search import ArxivClient, PubmedClient, ScholarClient, SearchResu
 import uuid
 import traceback
 
+from app.core.search.rate_limiter import FirestoreRateLimiter
+
 logger = logging.getLogger(__name__)
 
 class SearchService:
     def __init__(self):
-        self.arxiv = ArxivClient()
-        self.pubmed = PubmedClient()
-        self.scholar = ScholarClient()
+        self.rate_limiter = FirestoreRateLimiter()
+        self.arxiv = ArxivClient(rate_limiter=self.rate_limiter)
+        self.pubmed = PubmedClient(rate_limiter=self.rate_limiter)
+        self.scholar = ScholarClient(rate_limiter=self.rate_limiter)
         self.gemini = gemini_client
         self.recluster_service = ReclusterSearchService(self.gemini)
 

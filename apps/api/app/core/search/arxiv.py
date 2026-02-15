@@ -3,13 +3,16 @@ import xml.etree.ElementTree as ET
 import time
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.search.base import BaseSearchClient, SearchResult
+from app.core.search.rate_limiter import FirestoreRateLimiter
 
 class ArxivClient(BaseSearchClient):
     BASE_URL = "https://export.arxiv.org/api/query"
+    SERVICE_KEY = "arxiv"
 
-    def __init__(self):
+    def __init__(self, rate_limiter: FirestoreRateLimiter = None):
         # ArXiv API Guideline: max 1 req / 3 sec is recommended
-        super().__init__(interval=3.0)
+        # But user wants 1s interval.
+        super().__init__(interval=1.0, rate_limiter=rate_limiter)
         self._cache = {}
         self._cache_ttl = 3600  # 1 hour
 

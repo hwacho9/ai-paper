@@ -1,6 +1,7 @@
 import httpx
 import xml.etree.ElementTree as ET
 from app.core.search.base import BaseSearchClient, SearchResult
+from app.core.search.rate_limiter import FirestoreRateLimiter
 
 from app.core.config import settings
 
@@ -8,13 +9,16 @@ class PubmedClient(BaseSearchClient):
     BASE_URL_SEARCH = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
     BASE_URL_SUMMARY = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
     DB = "pubmed"
+    SERVICE_KEY = "pubmed"
 
-    def __init__(self):
+    def __init__(self, rate_limiter: FirestoreRateLimiter = None):
         # PubMed API Limit: 3 req/s without key, 10 req/s with key.
-        # We use 0.1s (10 req/s) if key exists, otherwise 0.34s (approx 3 req/s)
+        # Global Firestore Lock limits us to ~1 write/s.
+        # We enforce 1.0s interval globally to prevent blocking and ensure safety.
         self.api_key = settings.pubmed_api_key
-        interval = 0.1 if self.api_key else 0.34
-        super().__init__(interval=interval)
+        # interval = 0.1 if self.api_key else 0.34
+        # Force 1.0s for global safety
+        super().__init__(interval=1.0, rate_limiter=rate_limiter)
 
     async def search(self, query: str, limit: int = 10) -> list[SearchResult]:
         await self._wait_for_rate_limit()
