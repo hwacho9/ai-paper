@@ -739,7 +739,9 @@ export default function SearchPage() {
                                                                 ? "ライブラリに追加済み"
                                                                 : "ライブラリに追加"
                                                         }>
-                                                        {isLiked ? "❤️" : "🤍"}
+                                                        {isLiked
+                                                            ? "❤️ 保存済み"
+                                                            : "🤍 保存"}
                                                     </button>
                                                 );
                                             })()}
